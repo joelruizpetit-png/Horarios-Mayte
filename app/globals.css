@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #111827;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html, body {
+  color-scheme: light;
+  background-color: #ffffff;
+  color: #111827;
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ============================================================
+   ESTILOS DEDICADOS PARA REACT-CALENDAR (ALTO CONTRASTE)
+   Previene que el modo oscuro del móvil/navegador opaque o
+   vuelva invisible el texto, días o números del calendario.
+   ============================================================ */
+
+.react-calendar {
+  width: 100% !important;
+  max-width: 100% !important;
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border: none !important;
+  font-family: inherit !important;
+  line-height: 1.25em !important;
+}
+
+/* Barra de navegación del mes (botones <, > y título) */
+.react-calendar__navigation {
+  display: flex !important;
+  height: 44px !important;
+  margin-bottom: 12px !important;
+}
+
+.react-calendar__navigation button {
+  color: #111827 !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  background: none !important;
+  border-radius: 8px !important;
+}
+
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+  background-color: #f3f4f6 !important;
+}
+
+.react-calendar__navigation button:disabled {
+  background-color: #f9fafb !important;
+  color: #9ca3af !important;
+}
+
+.react-calendar__navigation__label {
+  color: #111827 !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  text-transform: capitalize !important;
+}
+
+/* Encabezados de días de la semana (LUN, MAR, MIÉ...) */
+.react-calendar__month-view__weekdays {
+  color: #111827 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  text-align: center !important;
+  padding: 6px 0 !important;
+}
+
+.react-calendar__month-view__weekdays__weekday {
+  padding: 6px 0 !important;
+}
+
+.react-calendar__month-view__weekdays__weekday abbr {
+  color: #111827 !important;
+  text-decoration: none !important;
+  font-weight: 700 !important;
+}
+
+/* Celdas / Días del mes */
+.react-calendar__tile {
+  color: #111827 !important;
+  background: none !important;
+  text-align: center !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  padding: 10px 4px !important;
+  border-radius: 8px !important;
+  transition: background-color 0.15s ease;
+}
+
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+  background-color: #f3f4f6 !important;
+  color: #111827 !important;
+}
+
+/* Fines de semana (Sábado y Domingo): color oscuro rojizo visible */
+.react-calendar__month-view__days__day--weekend {
+  color: #b91c1c !important;
+  font-weight: 700 !important;
+}
+
+/* Días de meses vecinos (anterior / siguiente) */
+.react-calendar__month-view__days__day--neighboringMonth {
+  color: #9ca3af !important;
+  font-weight: 500 !important;
+}
+
+/* Día actual (Hoy) */
+.react-calendar__tile--now {
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-weight: 700 !important;
+  border: 1px solid #bfdbfe !important;
+}
+
+.react-calendar__tile--now:enabled:hover,
+.react-calendar__tile--now:enabled:focus {
+  background-color: #dbeafe !important;
+  color: #1e40af !important;
+}
+
+/* Día seleccionado activo */
+.react-calendar__tile--active,
+.react-calendar__tile--active:enabled:hover,
+.react-calendar__tile--active:enabled:focus {
+  background-color: #111827 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
