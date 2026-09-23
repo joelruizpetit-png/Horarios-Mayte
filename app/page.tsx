@@ -1,13 +1,17 @@
 "use client";
 import { useState, useEffect } from 'react';
 import Calendario from './components/Calendario';
+import CalendarioSemanal from './components/CalendarioSemanal';
+import HeaderSofascore from './components/HeaderSofascore';
+import TabPlaceholder from './components/TabPlaceholder';
 import { auth } from './firebase'; 
 import { 
   signInWithEmailAndPassword, 
   onAuthStateChanged, 
   signOut,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  User
 } from 'firebase/auth';
 
 const CORREOS_AUTORIZADOS = [
@@ -16,8 +20,9 @@ const CORREOS_AUTORIZADOS = [
 ];
 
 export default function Home() {
-  const [usuario, setUsuario] = useState<any>(null);
+  const [usuario, setUsuario] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tabActiva, setTabActiva] = useState<string>('general');
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,6 +39,7 @@ export default function Home() {
           setLoading(false);
           return;
         }
+        setTabActiva('general'); // Pestaña 'General' activa por defecto al iniciar sesión
       }
       setUsuario(user);
       setLoading(false);
@@ -41,7 +47,7 @@ export default function Home() {
     return () => cancelarSuscripcion();
   }, []);
 
-  const iniciarSesion = async (e: any) => {
+  const iniciarSesion = async (e: React.FormEvent) => {
     e.preventDefault(); 
     setError("");
     try {
@@ -64,12 +70,13 @@ export default function Home() {
         setUsuario(null);
         setError(`Acceso denegado: El correo "${result.user?.email || ''}" no está autorizado.`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      if (err.code === "auth/popup-closed-by-user") {
+      const authError = err as { code?: string };
+      if (authError.code === "auth/popup-closed-by-user") {
         return;
       }
-      if (err.code === "auth/popup-blocked") {
+      if (authError.code === "auth/popup-blocked") {
         setError("El navegador bloqueó la ventana emergente. Por favor, habilita los popups.");
         return;
       }
@@ -83,40 +90,43 @@ export default function Home() {
 
   if (loading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>Cargando...</div>;
 
-  // --- SI YA ESTÁS DENTRO: MUESTRA EL CALENDARIO ---
+  // --- SI YA ESTÁS DENTRO: MUESTRA LA CABECERA SOFASCORE Y LA PESTAÑA ACTIVA ---
   if (usuario) {
     return (
       <div 
         className="bg-white text-gray-900"
         style={{
           minHeight: "100vh",
-          background: "linear-gradient(to top, #dfe9f3 0%, white 100%)", 
-          display: "flex", flexDirection: "column", alignItems: "center", padding: "20px",
+          background: "linear-gradient(to bottom, #f3f6fa 0%, #ffffff 100%)", 
+          display: "flex", 
+          flexDirection: "column", 
+          alignItems: "center",
           color: "#111827"
         }}
       >
-        <div style={{ width: "100%", maxWidth: "400px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-          <p style={{ margin: 0, color: "#1f2937", fontWeight: "600" }}>
-            Hola, {usuario.displayName || (usuario.email ? usuario.email.split('@')[0] : 'Usuario')}
-          </p>
-          <button 
-            onClick={cerrarSesion} 
-            style={{ 
-              padding: "6px 14px", 
-              fontSize: "12px", 
-              fontWeight: "600",
-              border: "1px solid #d1d5db", 
-              background: "white", 
-              color: "#1f2937",
-              borderRadius: "6px", 
-              cursor: "pointer",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-            }}
-          >
-            Cerrar Sesión
-          </button>
-        </div>
-        <Calendario />
+        {/* CABECERA SUPERIOR ESTILO SOFASCORE CON 4 PESTAÑAS */}
+        <HeaderSofascore 
+          usuario={usuario}
+          onCerrarSesion={cerrarSesion}
+          tabActiva={tabActiva}
+          onTabChange={setTabActiva}
+        />
+
+        {/* CONTENEDOR PRINCIPAL SEGÚN LA PESTAÑA ACTIVA */}
+        <main 
+          style={{
+            width: "100%",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            padding: "0 16px 40px 16px"
+          }}
+        >
+          {tabActiva === 'general' && <Calendario />}
+          {tabActiva === 'semanal' && <CalendarioSemanal />}
+          {tabActiva === 'tab3' && <TabPlaceholder nombre="Pestaña 3" icono="📊" />}
+          {tabActiva === 'tab4' && <TabPlaceholder nombre="Pestaña 4" icono="⚙️" />}
+        </main>
       </div>
     );
   }
