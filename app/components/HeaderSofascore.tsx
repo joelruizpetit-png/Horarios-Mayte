@@ -4,6 +4,7 @@ import React from 'react';
 export interface TabItem {
   id: string;
   label: string;
+  icon?: string;
 }
 
 interface HeaderSofascoreProps {
@@ -20,7 +21,7 @@ interface HeaderSofascoreProps {
 const DEFAULT_TABS: TabItem[] = [
   { id: 'general', label: 'General' },
   { id: 'semanal', label: 'Semanal' },
-  { id: 'tab3', label: 'Pestaña 3' },
+  { id: 'deportes', label: 'Deportes', icon: '🏆' },
   { id: 'tab4', label: 'Pestaña 4' },
 ];
 
@@ -198,7 +199,10 @@ export default function HeaderSofascore({
                   }
                 }}
               >
-                <span>{tab.label}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {tab.icon && <span style={{ fontSize: '14px', lineHeight: 1 }}>{tab.icon}</span>}
+                  <span>{tab.label}</span>
+                </span>
 
                 {/* LÍNEA INDICADORA INFERIOR ESTILO SOFASCORE */}
                 {esActiva && (

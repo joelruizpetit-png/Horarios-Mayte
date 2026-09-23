@@ -4,6 +4,7 @@ import Calendario from './components/Calendario';
 import CalendarioSemanal from './components/CalendarioSemanal';
 import HeaderSofascore from './components/HeaderSofascore';
 import TabPlaceholder from './components/TabPlaceholder';
+import CalendarioDeportes from './components/CalendarioDeportes';
 import { auth } from './firebase'; 
 import { 
   signInWithEmailAndPassword, 
@@ -124,7 +125,7 @@ export default function Home() {
         >
           {tabActiva === 'general' && <Calendario />}
           {tabActiva === 'semanal' && <CalendarioSemanal />}
-          {tabActiva === 'tab3' && <TabPlaceholder nombre="Pestaña 3" icono="📊" />}
+          {(tabActiva === 'deportes' || tabActiva === 'tab3') && <CalendarioDeportes />}
           {tabActiva === 'tab4' && <TabPlaceholder nombre="Pestaña 4" icono="⚙️" />}
         </main>
       </div>
