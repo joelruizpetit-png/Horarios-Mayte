@@ -16,6 +16,9 @@ interface HeaderSofascoreProps {
   tabActiva: string;
   onTabChange: (tabId: string) => void;
   tabs?: TabItem[];
+  onAbrirMenuLateral?: () => void;
+  seccionActiva?: 'planificador' | 'finanzas';
+  onCambiarSeccion?: (seccion: 'planificador' | 'finanzas') => void;
 }
 
 const DEFAULT_TABS: TabItem[] = [
@@ -30,7 +33,10 @@ export default function HeaderSofascore({
   onCerrarSesion,
   tabActiva,
   onTabChange,
-  tabs = DEFAULT_TABS
+  tabs = DEFAULT_TABS,
+  onAbrirMenuLateral,
+  seccionActiva = 'planificador',
+  onCambiarSeccion
 }: HeaderSofascoreProps) {
   const nombreUsuario = usuario?.displayName || (usuario?.email ? usuario.email.split('@')[0] : 'Usuario');
 
@@ -60,8 +66,45 @@ export default function HeaderSofascore({
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          {/* LOGO / TÍTULO DE LA APLICACIÓN */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* LOGO / TÍTULO DE LA APLICACIÓN Y BOTÓN MENÚ HAMBURGUESA */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* BOTÓN MENÚ HAMBURGUESA */}
+            {onAbrirMenuLateral && (
+              <button
+                onClick={onAbrirMenuLateral}
+                aria-label="Abrir menú lateral de navegación"
+                title="Abrir menú"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '8px',
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#ffffff',
+                  transition: 'all 0.15s ease',
+                  flexShrink: 0
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.28)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </button>
+            )}
+
             <div style={{
               width: '34px',
               height: '34px',
@@ -73,7 +116,8 @@ export default function HeaderSofascore({
               boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
               fontWeight: 800,
               fontSize: '18px',
-              color: '#0047b3'
+              color: '#0047b3',
+              flexShrink: 0
             }}>
               PF
             </div>
@@ -123,7 +167,7 @@ export default function HeaderSofascore({
             }}
             onMouseOut={(e) => {
               e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
             }}
           >
             <span>Salir</span>
@@ -136,96 +180,151 @@ export default function HeaderSofascore({
         </div>
       </div>
 
-      {/* BARRA DE PESTAÑAS SUB-HEADER ESTILO SOFASCORE */}
-      <nav 
-        aria-label="Pestañas de navegación"
-        style={{
+      {/* SUB-HEADER: SI ESTAMOS EN FINANZAS O EN EL PLANIFICADOR */}
+      {seccionActiva === 'finanzas' ? (
+        <div style={{
           backgroundColor: '#ffffff',
           borderBottom: '1px solid #e5e7eb',
           display: 'flex',
           justifyContent: 'center',
-          width: '100%'
-        }}
-      >
-        <div style={{
           width: '100%',
-          maxWidth: '500px',
-          display: 'flex',
-          alignItems: 'stretch',
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none'
+          padding: '10px 16px'
         }}>
-          {tabs.map((tab) => {
-            const esActiva = tabActiva === tab.id || 
-              (tab.id === 'menu-alma' && tabActiva === 'tab4') || 
-              (tab.id === 'tab4' && tabActiva === 'menu-alma');
-
-            return (
-              <button
-                key={tab.id}
-                onClick={() => onTabChange(tab.id)}
-                role="tab"
-                aria-selected={esActiva}
-                style={{
-                  flex: '1 0 auto',
-                  minWidth: '75px',
-                  padding: '13px 12px 11px 12px',
-                  background: esActiva ? '#ffffff' : 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '14px',
-                  fontWeight: esActiva ? 700 : 600,
-                  color: esActiva ? '#0047b3' : '#64748b',
-                  letterSpacing: '-0.2px',
-                  textTransform: 'none',
-                  transition: 'color 0.15s ease, background-color 0.15s ease',
-                  userSelect: 'none'
-                }}
-                onMouseOver={(e) => {
-                  if (!esActiva) {
-                    e.currentTarget.style.color = '#0f172a';
-                    e.currentTarget.style.backgroundColor = '#f8fafc';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!esActiva) {
-                    e.currentTarget.style.color = '#64748b';
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  {tab.icon && <span style={{ fontSize: '14px', lineHeight: 1 }}>{tab.icon}</span>}
-                  <span>{tab.label}</span>
+          <div style={{
+            width: '100%',
+            maxWidth: '500px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}>💰</span>
+              <div>
+                <span style={{ fontSize: '14px', fontWeight: 800, color: '#047857' }}>
+                  Finanzas Familiares
                 </span>
-
-                {/* LÍNEA INDICADORA INFERIOR ESTILO SOFASCORE */}
-                {esActiva && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: '12%',
-                      right: '12%',
-                      height: '3px',
-                      backgroundColor: '#0047b3',
-                      borderRadius: '3px 3px 0 0',
-                      boxShadow: '0 -1px 3px rgba(0, 71, 179, 0.3)'
-                    }}
-                  />
-                )}
+                <span style={{ fontSize: '11px', color: '#64748b', display: 'block', fontWeight: 500 }}>
+                  Control de Gastos e Ingresos
+                </span>
+              </div>
+            </div>
+            {onCambiarSeccion && (
+              <button
+                onClick={() => onCambiarSeccion('planificador')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  backgroundColor: '#eff6ff',
+                  color: '#0047b3',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#dbeafe')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#eff6ff')}
+              >
+                <span>📅 Ver Agenda</span>
               </button>
-            );
-          })}
+            )}
+          </div>
         </div>
-      </nav>
+      ) : (
+        /* BARRA DE PESTAÑAS SUB-HEADER ESTILO SOFASCORE */
+        <nav 
+          aria-label="Pestañas de navegación"
+          style={{
+            backgroundColor: '#ffffff',
+            borderBottom: '1px solid #e5e7eb',
+            display: 'flex',
+            justifyContent: 'center',
+            width: '100%'
+          }}
+        >
+          <div style={{
+            width: '100%',
+            maxWidth: '500px',
+            display: 'flex',
+            alignItems: 'stretch',
+            overflowX: 'auto',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none'
+          }}>
+            {tabs.map((tab) => {
+              const esActiva = tabActiva === tab.id || 
+                (tab.id === 'menu-alma' && tabActiva === 'tab4') || 
+                (tab.id === 'tab4' && tabActiva === 'menu-alma');
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => onTabChange(tab.id)}
+                  role="tab"
+                  aria-selected={esActiva}
+                  style={{
+                    flex: '1 0 auto',
+                    minWidth: '75px',
+                    padding: '13px 12px 11px 12px',
+                    background: esActiva ? '#ffffff' : 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: esActiva ? 700 : 600,
+                    color: esActiva ? '#0047b3' : '#64748b',
+                    letterSpacing: '-0.2px',
+                    textTransform: 'none',
+                    transition: 'color 0.15s ease, background-color 0.15s ease',
+                    userSelect: 'none'
+                  }}
+                  onMouseOver={(e) => {
+                    if (!esActiva) {
+                      e.currentTarget.style.color = '#0f172a';
+                      e.currentTarget.style.backgroundColor = '#f8fafc';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!esActiva) {
+                      e.currentTarget.style.color = '#64748b';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    {tab.icon && <span style={{ fontSize: '14px', lineHeight: 1 }}>{tab.icon}</span>}
+                    <span>{tab.label}</span>
+                  </span>
+
+                  {/* LÍNEA INDICADORA INFERIOR ESTILO SOFASCORE */}
+                  {esActiva && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: '12%',
+                        right: '12%',
+                        height: '3px',
+                        backgroundColor: '#0047b3',
+                        borderRadius: '3px 3px 0 0',
+                        boxShadow: '0 -1px 3px rgba(0, 71, 179, 0.3)'
+                      }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </header>
   );
 }
