@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase'; 
+import { db, auth } from '../firebase'; 
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 interface Evento {
@@ -8,6 +8,8 @@ interface Evento {
   hora: string;
   horaFin?: string;
   tipo?: 'normal' | 'trabajo' | string;
+  categoria?: string;
+  creador?: string;
 }
 
 const DIAS_SEMANA = [
@@ -25,8 +27,19 @@ const MESES = [
   'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
 ];
 
-export default function CalendarioSemanal() {
-  const [fechaReferencia, setFechaReferencia] = useState(new Date());
+interface CalendarioSemanalProps {
+  usuario?: { email?: string | null } | null;
+  fechaSeleccionada?: Date;
+  onFechaChange?: (fecha: Date) => void;
+}
+
+export default function CalendarioSemanal({
+  usuario,
+  fechaSeleccionada,
+  onFechaChange
+}: CalendarioSemanalProps = {}) {
+  const [fechaInterna, setFechaInterna] = useState<Date>(new Date());
+  const fechaReferencia = fechaSeleccionada || fechaInterna;
   const [eventos, setEventos] = useState<Record<string, (Evento | string)[]>>({});
   const [mostrarModal, setMostrarModal] = useState(false);
   const [fechaModal, setFechaModal] = useState<Date>(new Date());
@@ -37,6 +50,33 @@ export default function CalendarioSemanal() {
     horaFin: "", 
     tipo: "normal" 
   });
+
+  const obtenerInicialCreador = () => {
+    const email = usuario?.email || auth?.currentUser?.email || '';
+    const emailLimpio = email.toLowerCase().trim();
+    if (emailLimpio === 'joelruizpetit@gmail.com') return 'J';
+    if (emailLimpio === 'aijg1985@gmail.com') return 'A';
+    return emailLimpio ? emailLimpio.charAt(0).toUpperCase() : 'J';
+  };
+
+  // Identificar si un evento proviene de la Pestaña Deportes
+  const esEventoDeporte = (e: Evento | string | null | undefined): boolean => {
+    if (!e) return false;
+    if (typeof e === 'string') {
+      return e.startsWith('⚽') || e.startsWith('🏎️') || e.startsWith('⏱️');
+    }
+    if (e.tipo === 'deporte' || e.tipo === 'deportes' || e.categoria === 'Deportes' || e.categoria === 'deportes') {
+      return true;
+    }
+    const tit = (e.titulo || '').toLowerCase();
+    if (e.titulo && (e.titulo.startsWith('⚽') || e.titulo.startsWith('🏎️') || e.titulo.startsWith('⏱️'))) {
+      return true;
+    }
+    if (tit.includes('barça vs') || tit.includes('f1:') || tit.includes('fórmula 1')) {
+      return true;
+    }
+    return false;
+  };
 
   // Conexión en tiempo real con Firestore
   useEffect(() => {
@@ -71,11 +111,18 @@ export default function CalendarioSemanal() {
   const cambiarSemana = (offsetDias: number) => {
     const nuevaFecha = new Date(fechaReferencia);
     nuevaFecha.setDate(nuevaFecha.getDate() + offsetDias);
-    setFechaReferencia(nuevaFecha);
+    setFechaInterna(nuevaFecha);
+    if (onFechaChange) {
+      onFechaChange(nuevaFecha);
+    }
   };
 
   const irAHoy = () => {
-    setFechaReferencia(new Date());
+    const hoy = new Date();
+    setFechaInterna(hoy);
+    if (onFechaChange) {
+      onFechaChange(hoy);
+    }
   };
 
   const abrirModalParaDia = (dia: Date) => {
@@ -94,7 +141,8 @@ export default function CalendarioSemanal() {
       titulo: nuevoEvento.titulo,
       hora: nuevoEvento.hora || "--:--",
       horaFin: nuevoEvento.horaFin || "",
-      tipo: nuevoEvento.tipo || "normal"
+      tipo: nuevoEvento.tipo || "normal",
+      creador: obtenerInicialCreador()
     };
 
     const nuevosEventos = {
@@ -338,12 +386,25 @@ export default function CalendarioSemanal() {
                     const esAntigua = typeof nota === 'string';
                     const titulo = esAntigua ? nota : nota.titulo;
                     const horaInicio = esAntigua ? "--:--" : (nota.hora || "--:--");
-                    const esTrabajo = !esAntigua && nota.tipo === 'trabajo';
+                    const esDeporte = esEventoDeporte(nota);
+                    const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
                     const horaFin = !esAntigua ? nota.horaFin : "";
+                    // Para eventos de deporte: NO mostrar creador ni 'J' ni 'A'
+                    const creadorNota = esDeporte ? '' : (!esAntigua && (nota as Evento).creador ? (nota as Evento).creador!.toUpperCase() : (esTrabajo ? 'J' : ''));
 
                     let textoHora = horaInicio;
                     if (esTrabajo && horaFin) {
                       textoHora = `${horaInicio} - ${horaFin}`;
+                    }
+
+                    let borderColor = '#9ca3af';
+                    let bgColor = '#f9fafb';
+                    if (esDeporte) {
+                      borderColor = '#FACC15';
+                      bgColor = '#fefce8';
+                    } else if (esTrabajo) {
+                      borderColor = '#0070f3';
+                      bgColor = '#eff6ff';
                     }
 
                     return (
@@ -354,23 +415,53 @@ export default function CalendarioSemanal() {
                           justifyContent: 'space-between',
                           alignItems: 'center',
                           padding: '8px 10px',
-                          backgroundColor: esTrabajo ? '#eff6ff' : '#f9fafb',
+                          backgroundColor: bgColor,
                           border: '1px solid #e5e7eb',
-                          borderLeft: esTrabajo ? '4px solid #0070f3' : '4px solid #9ca3af',
+                          borderLeft: `4px solid ${borderColor}`,
                           borderRadius: '6px'
                         }}
                       >
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            color: esTrabajo ? '#0070f3' : '#4b5563'
-                          }}>
-                            {esTrabajo ? `💼 ${textoHora}` : `🕒 ${textoHora}`}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
+                            {esDeporte ? (
+                              <span
+                                title="Evento deportivo"
+                                style={{
+                                  width: '10px',
+                                  height: '10px',
+                                  borderRadius: '50%',
+                                  backgroundColor: '#FACC15',
+                                  border: '1.5px solid #000000',
+                                  display: 'inline-block',
+                                  flexShrink: 0
+                                }}
+                              />
+                            ) : (
+                              creadorNota && (
+                                <span style={{
+                                  fontSize: '10px',
+                                  fontWeight: 800,
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  backgroundColor: esTrabajo ? '#111827' : '#EF4444',
+                                  color: '#ffffff',
+                                  letterSpacing: '0.4px'
+                                }}>
+                                  {creadorNota}
+                                </span>
+                              )
+                            )}
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              color: esDeporte ? '#a16207' : (esTrabajo ? '#0070f3' : '#4b5563')
+                            }}>
+                              {esDeporte ? `🏆 ${textoHora}` : (esTrabajo ? `💼 ${textoHora}` : `🕒 ${textoHora}`)}
+                            </span>
+                          </div>
                           <span style={{
                             fontSize: '13px',
-                            fontWeight: esTrabajo ? 700 : 600,
+                            fontWeight: (esTrabajo || esDeporte) ? 700 : 600,
                             color: '#111827'
                           }}>
                             {titulo}

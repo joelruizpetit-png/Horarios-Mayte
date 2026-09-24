@@ -22,7 +22,7 @@ const DEFAULT_TABS: TabItem[] = [
   { id: 'general', label: 'General' },
   { id: 'semanal', label: 'Semanal' },
   { id: 'deportes', label: 'Deportes', icon: '🏆' },
-  { id: 'tab4', label: 'Pestaña 4' },
+  { id: 'menu-alma', label: 'Menú Alma', icon: '🍴' },
 ];
 
 export default function HeaderSofascore({
@@ -157,7 +157,9 @@ export default function HeaderSofascore({
           msOverflowStyle: 'none'
         }}>
           {tabs.map((tab) => {
-            const esActiva = tabActiva === tab.id;
+            const esActiva = tabActiva === tab.id || 
+              (tab.id === 'menu-alma' && tabActiva === 'tab4') || 
+              (tab.id === 'tab4' && tabActiva === 'menu-alma');
 
             return (
               <button

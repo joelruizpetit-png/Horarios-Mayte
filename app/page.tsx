@@ -3,12 +3,12 @@ import { useState, useEffect } from 'react';
 import Calendario from './components/Calendario';
 import CalendarioSemanal from './components/CalendarioSemanal';
 import HeaderSofascore from './components/HeaderSofascore';
-import TabPlaceholder from './components/TabPlaceholder';
 import CalendarioDeportes from './components/CalendarioDeportes';
-import { auth } from './firebase'; 
-import { 
-  signInWithEmailAndPassword, 
-  onAuthStateChanged, 
+import MenuEscolarAlma from './components/MenuEscolarAlma';
+import { auth } from './firebase';
+import {
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
   signOut,
   GoogleAuthProvider,
   signInWithPopup,
@@ -24,7 +24,8 @@ export default function Home() {
   const [usuario, setUsuario] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [tabActiva, setTabActiva] = useState<string>('general');
-  
+  const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(new Date());
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -49,7 +50,7 @@ export default function Home() {
   }, []);
 
   const iniciarSesion = async (e: React.FormEvent) => {
-    e.preventDefault(); 
+    e.preventDefault();
     setError("");
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -94,19 +95,19 @@ export default function Home() {
   // --- SI YA ESTÁS DENTRO: MUESTRA LA CABECERA SOFASCORE Y LA PESTAÑA ACTIVA ---
   if (usuario) {
     return (
-      <div 
+      <div
         className="bg-white text-gray-900"
         style={{
           minHeight: "100vh",
-          background: "linear-gradient(to bottom, #f3f6fa 0%, #ffffff 100%)", 
-          display: "flex", 
-          flexDirection: "column", 
+          background: "linear-gradient(to bottom, #f3f6fa 0%, #ffffff 100%)",
+          display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           color: "#111827"
         }}
       >
         {/* CABECERA SUPERIOR ESTILO SOFASCORE CON 4 PESTAÑAS */}
-        <HeaderSofascore 
+        <HeaderSofascore
           usuario={usuario}
           onCerrarSesion={cerrarSesion}
           tabActiva={tabActiva}
@@ -114,7 +115,7 @@ export default function Home() {
         />
 
         {/* CONTENEDOR PRINCIPAL SEGÚN LA PESTAÑA ACTIVA */}
-        <main 
+        <main
           style={{
             width: "100%",
             display: "flex",
@@ -123,10 +124,28 @@ export default function Home() {
             padding: "0 16px 40px 16px"
           }}
         >
-          {tabActiva === 'general' && <Calendario />}
-          {tabActiva === 'semanal' && <CalendarioSemanal />}
+          {tabActiva === 'general' && (
+            <Calendario 
+              usuario={usuario} 
+              fechaSeleccionada={fechaSeleccionada}
+              onFechaChange={setFechaSeleccionada}
+            />
+          )}
+          {tabActiva === 'semanal' && (
+            <CalendarioSemanal 
+              usuario={usuario} 
+              fechaSeleccionada={fechaSeleccionada}
+              onFechaChange={setFechaSeleccionada}
+            />
+          )}
           {(tabActiva === 'deportes' || tabActiva === 'tab3') && <CalendarioDeportes />}
-          {tabActiva === 'tab4' && <TabPlaceholder nombre="Pestaña 4" icono="⚙️" />}
+          {(tabActiva === 'menu-alma' || tabActiva === 'tab4') && (
+            <MenuEscolarAlma 
+              usuario={usuario}
+              fechaSeleccionada={fechaSeleccionada}
+              onFechaChange={setFechaSeleccionada}
+            />
+          )}
         </main>
       </div>
     );
@@ -137,7 +156,7 @@ export default function Home() {
     <div style={{
       height: "100vh",
       width: "100vw",
-      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", 
+      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
       display: "flex", justifyContent: "center", alignItems: "center", fontFamily: "Arial, sans-serif"
     }}>
       <div style={{
@@ -146,28 +165,28 @@ export default function Home() {
         width: "90%", maxWidth: "350px", textAlign: "center",
         display: "flex", flexDirection: "column", alignItems: "center"
       }}>
-        
+
         {/* --- CONTENEDOR BLANCO PARA EL LOGO --- */}
         <div style={{
-            backgroundColor: "white",
-            padding: "15px",
-            borderRadius: "15px",
-            marginBottom: "25px",
-            boxShadow: "inset 0 2px 5px rgba(0,0,0,0.05)"
+          backgroundColor: "white",
+          padding: "15px",
+          borderRadius: "15px",
+          marginBottom: "25px",
+          boxShadow: "inset 0 2px 5px rgba(0,0,0,0.05)"
         }}>
-            <img 
-              src="/logo.png" 
-              alt="Planificador Familiar"
-              style={{ 
-                width: "200px",
-                height: "auto", 
-                display: "block"
-              }} 
-            />
+          <img
+            src="/logo.png"
+            alt="Planificador Familiar"
+            style={{
+              width: "200px",
+              height: "auto",
+              display: "block"
+            }}
+          />
         </div>
 
         {/* BOTÓN DE GOOGLE */}
-        <button 
+        <button
           type="button"
           onClick={iniciarSesionConGoogle}
           style={{
@@ -219,15 +238,15 @@ export default function Home() {
         </div>
 
         <form onSubmit={iniciarSesion} style={{ display: "flex", flexDirection: "column", gap: "15px", width: "100%" }}>
-          <input 
+          <input
             type="email" placeholder="Correo electrónico" value={email} onChange={(e) => setEmail(e.target.value)}
             style={{ padding: "12px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "16px", outline: "none", backgroundColor: "white", color: "#111827" }}
           />
-          <input 
+          <input
             type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)}
             style={{ padding: "12px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "16px", outline: "none", backgroundColor: "white", color: "#111827" }}
           />
-          <button 
+          <button
             type="submit"
             style={{
               padding: "12px", borderRadius: "8px", border: "none",

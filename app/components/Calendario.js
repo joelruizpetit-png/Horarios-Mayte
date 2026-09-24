@@ -2,11 +2,22 @@
 import React, { useState, useEffect } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { db } from '../firebase'; 
+import { db, auth } from '../firebase'; 
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-export default function Calendario() {
-  const [date, setDate] = useState(new Date());
+/**
+ * @param {{ usuario?: any, fechaSeleccionada?: Date, onFechaChange?: (fecha: Date) => void }} [props]
+ */
+export default function Calendario({ usuario, fechaSeleccionada, onFechaChange } = {}) {
+  const [fechaInterna, setFechaInterna] = useState(new Date());
+  const date = fechaSeleccionada || fechaInterna;
+
+  const manejarCambioFecha = (nuevaFecha) => {
+    setFechaInterna(nuevaFecha);
+    if (onFechaChange) {
+      onFechaChange(nuevaFecha);
+    }
+  };
   const [eventos, setEventos] = useState({});
   const [mostrarModal, setMostrarModal] = useState(false);
   
@@ -17,6 +28,34 @@ export default function Calendario() {
     horaFin: "", 
     tipo: "normal" 
   });
+
+  // Obtener la inicial del creador según la sesión activa de Google
+  const obtenerInicialCreador = () => {
+    const email = usuario?.email || auth?.currentUser?.email || '';
+    const emailLimpio = email.toLowerCase().trim();
+    if (emailLimpio === 'joelruizpetit@gmail.com') return 'J';
+    if (emailLimpio === 'aijg1985@gmail.com') return 'A';
+    return emailLimpio ? emailLimpio.charAt(0).toUpperCase() : 'J';
+  };
+
+  // Identificar si un evento proviene de la Pestaña Deportes
+  const esEventoDeporte = (e) => {
+    if (!e) return false;
+    if (typeof e === 'string') {
+      return e.startsWith('⚽') || e.startsWith('🏎️') || e.startsWith('⏱️');
+    }
+    if (e.tipo === 'deporte' || e.tipo === 'deportes' || e.categoria === 'Deportes' || e.categoria === 'deportes') {
+      return true;
+    }
+    const tit = (e.titulo || '').toLowerCase();
+    if (e.titulo && (e.titulo.startsWith('⚽') || e.titulo.startsWith('🏎️') || e.titulo.startsWith('⏱️'))) {
+      return true;
+    }
+    if (tit.includes('barça vs') || tit.includes('f1:') || tit.includes('fórmula 1')) {
+      return true;
+    }
+    return false;
+  };
 
   useEffect(() => {
     const docRef = doc(db, "agenda", "datos");
@@ -38,7 +77,8 @@ export default function Calendario() {
       titulo: nuevoEvento.titulo,
       hora: nuevoEvento.hora || "--:--",
       horaFin: nuevoEvento.horaFin || "", // Guardamos la hora de salida si existe
-      tipo: nuevoEvento.tipo || "normal"
+      tipo: nuevoEvento.tipo || "normal",
+      creador: obtenerInicialCreador()
     };
 
     const nuevosEventos = {
@@ -68,23 +108,90 @@ export default function Calendario() {
     await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
   };
 
-  // --- LÓGICA DE PUNTITOS DE COLORES ---
+  // --- LÓGICA DE MARCADORES CON INICIALES DEL CREADOR (J y A) Y DEPORTES ---
   const tileContent = ({ date, view }) => {
     if (view === 'month') {
       const fechaClave = date.toDateString();
       const eventosDelDia = eventos[fechaClave] || [];
 
       if (eventosDelDia.length > 0) {
-        const hayTrabajo = eventosDelDia.some(e => e.tipo === 'trabajo');
-        const hayNormal = eventosDelDia.some(e => !e.tipo || e.tipo === 'normal');
+        let hayDeportes = false;
+        // Mapear combinaciones únicas de creador y tipo para eventos no deportivos
+        const marcadoresMap = new Map();
+
+        eventosDelDia.forEach((e) => {
+          // Identificar si es un evento de deportes
+          if (esEventoDeporte(e)) {
+            hayDeportes = true;
+            return; // NO mostrar ni 'J' ni 'A'
+          }
+
+          const esAntigua = typeof e === 'string';
+          const esTrabajo = !esAntigua && e.tipo === 'trabajo';
+          const tipo = esTrabajo ? 'trabajo' : 'normal';
+
+          // Asignar creador ('J' o 'A')
+          let creador = 'J';
+          if (!esAntigua && e.creador) {
+            creador = e.creador.toUpperCase();
+          } else if (esTrabajo) {
+            creador = 'J';
+          }
+
+          const clave = `${creador}-${tipo}`;
+          if (!marcadoresMap.has(clave)) {
+            marcadoresMap.set(clave, { creador, tipo });
+          }
+        });
+
+        const marcadores = Array.from(marcadoresMap.values());
+        marcadores.sort((a, b) => a.creador.localeCompare(b.creador));
+
+        if (marcadores.length === 0 && !hayDeportes) {
+          return null;
+        }
 
         return (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '3px', marginTop: '2px' }}>
-            {hayNormal && (
-              <div style={{ height: '6px', width: '6px', backgroundColor: '#ff4d4d', borderRadius: '50%' }}></div>
-            )}
-            {hayTrabajo && (
-              <div style={{ height: '6px', width: '6px', backgroundColor: '#0070f3', borderRadius: '50%' }}></div>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '4px',
+            marginTop: '3px',
+            lineHeight: 1
+          }}>
+            {marcadores.map((m, idx) => {
+              const esTrabajo = m.tipo === 'trabajo';
+              return (
+                <span
+                  key={idx}
+                  className={esTrabajo ? "marcador-inicial-trabajo" : "marcador-inicial-normal"}
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    color: esTrabajo ? '#111827' : '#EF4444',
+                    letterSpacing: '0.2px'
+                  }}
+                >
+                  {m.creador}
+                </span>
+              );
+            })}
+            {hayDeportes && (
+              <span
+                className="marcador-circulo-deporte"
+                title="Evento deportivo"
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#FACC15',
+                  border: '1.5px solid #000000',
+                  display: 'inline-block',
+                  flexShrink: 0,
+                  boxShadow: '0 0 0 0.5px rgba(255,255,255,0.6)'
+                }}
+              />
             )}
           </div>
         );
@@ -125,7 +232,7 @@ export default function Calendario() {
         }}
       >
         <Calendar 
-          onChange={setDate} 
+          onChange={manejarCambioFecha} 
           value={date} 
           locale="es-ES" 
           tileContent={tileContent} 
@@ -176,7 +283,10 @@ export default function Calendario() {
                 const esAntigua = typeof nota === 'string';
                 const titulo = esAntigua ? nota : nota.titulo;
                 const horaInicio = esAntigua ? "--:--" : nota.hora;
-                const esTrabajo = !esAntigua && nota.tipo === 'trabajo';
+                const esDeporte = esEventoDeporte(nota);
+                const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
+                // Para eventos de deporte: NO mostrar creador ni 'J' ni 'A'
+                const creador = esDeporte ? '' : (!esAntigua && nota.creador ? nota.creador.toUpperCase() : (esTrabajo ? 'J' : ''));
                 
                 // Si es trabajo y tiene hora fin, mostramos el rango (Ej: 08:00 - 15:00)
                 let textoHora = horaInicio;
@@ -184,11 +294,21 @@ export default function Calendario() {
                     textoHora = `${horaInicio} - ${nota.horaFin}`;
                 }
 
+                let borderColor = '#9ca3af';
+                let bgColor = '#f9fafb';
+                if (esDeporte) {
+                  borderColor = '#FACC15';
+                  bgColor = '#fefce8';
+                } else if (esTrabajo) {
+                  borderColor = '#0070f3';
+                  bgColor = '#eff6ff';
+                }
+
                 return (
                   <li key={index} style={{ 
                     marginBottom: "10px", padding: "12px", 
-                    backgroundColor: esTrabajo ? "#eff6ff" : "#f9fafb", 
-                    borderLeft: esTrabajo ? "4px solid #0070f3" : "4px solid #9ca3af",
+                    backgroundColor: bgColor, 
+                    borderLeft: `4px solid ${borderColor}`,
                     borderRadius: "8px", 
                     boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
                     border: "1px solid #e5e7eb",
@@ -196,10 +316,44 @@ export default function Calendario() {
                     display: "flex", justifyContent: "space-between", alignItems: "center"
                   }}>
                     <div>
-                      <span style={{ display: "block", fontSize: "12px", color: esTrabajo ? "#0070f3" : "#4b5563", fontWeight: "bold" }}>
-                        {esTrabajo ? "💼 " + textoHora : "🕒 " + textoHora}
-                      </span>
-                      <span style={{ fontSize: "15px", fontWeight: esTrabajo ? "700" : "600", color: "#111827" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
+                        {esDeporte ? (
+                          <span
+                            title="Evento deportivo"
+                            style={{
+                              width: "11px",
+                              height: "11px",
+                              borderRadius: "50%",
+                              backgroundColor: "#FACC15",
+                              border: "1.5px solid #000000",
+                              display: "inline-block",
+                              flexShrink: 0
+                            }}
+                          />
+                        ) : (
+                          creador && (
+                            <span style={{
+                              fontSize: "10px",
+                              fontWeight: "800",
+                              padding: "1px 6px",
+                              borderRadius: "4px",
+                              backgroundColor: esTrabajo ? "#111827" : "#EF4444",
+                              color: "#ffffff",
+                              letterSpacing: "0.5px"
+                            }}>
+                              {creador}
+                            </span>
+                          )
+                        )}
+                        <span style={{ 
+                          fontSize: "12px", 
+                          color: esDeporte ? "#a16207" : (esTrabajo ? "#0070f3" : "#4b5563"), 
+                          fontWeight: "bold" 
+                        }}>
+                          {esDeporte ? "🏆 " + textoHora : (esTrabajo ? "💼 " + textoHora : "🕒 " + textoHora)}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: "15px", fontWeight: (esTrabajo || esDeporte) ? "700" : "600", color: "#111827" }}>
                         {titulo}
                       </span>
                     </div>

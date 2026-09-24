@@ -1,11 +1,13 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { 
-  obtenerEventosDeportivos, 
+  fetchCarrerasF1, 
+  fetchPartidosBarca, 
   EventoBarca, 
-  EventoF1 
+  EventoF1,
+  EventoDeportivo 
 } from '../data/eventosDeportivos';
 
 type CategoriaFiltro = 'todos' | 'barca' | 'f1';
@@ -15,12 +17,84 @@ interface EventoAgenda {
   hora: string;
   horaFin?: string;
   tipo?: string;
+  categoria?: string;
+  creador?: string;
 }
 
 export default function CalendarioDeportes() {
   const [categoria, setCategoria] = useState<CategoriaFiltro>('todos');
+  const [carrerasF1, setCarrerasF1] = useState<EventoF1[]>([]);
+  const [partidosBarca, setPartidosBarca] = useState<EventoBarca[]>([]);
+  const [cargando, setCargando] = useState<boolean>(true);
+  const [errorF1, setErrorF1] = useState<string | null>(null);
+  const [errorBarca, setErrorBarca] = useState<string | null>(null);
+
   const [eventosAgenda, setEventosAgenda] = useState<Record<string, (EventoAgenda | string)[]>>({});
   const [mensajeToast, setMensajeToast] = useState<string | null>(null);
+
+  // Carga inicial al montar el componente
+  useEffect(() => {
+    let cancelado = false;
+
+    async function ejecutarCarga() {
+      const [resF1, resBarca] = await Promise.allSettled([
+        fetchCarrerasF1(),
+        fetchPartidosBarca()
+      ]);
+
+      if (cancelado) return;
+
+      if (resF1.status === 'fulfilled') {
+        setCarrerasF1(resF1.value);
+      } else {
+        console.error("Error al obtener carreras F1:", resF1.reason);
+        setErrorF1("No se pudo conectar con la API de Fórmula 1 en este momento.");
+      }
+
+      if (resBarca.status === 'fulfilled') {
+        setPartidosBarca(resBarca.value);
+      } else {
+        console.error("Error al obtener partidos del Barça:", resBarca.reason);
+        setErrorBarca("No se pudo conectar con la API del FC Barcelona en este momento.");
+      }
+
+      setCargando(false);
+    }
+
+    ejecutarCarga();
+
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  // Función para recargar manualmente desde el botón
+  const recargarManual = useCallback(async () => {
+    setCargando(true);
+    setErrorF1(null);
+    setErrorBarca(null);
+
+    const [resF1, resBarca] = await Promise.allSettled([
+      fetchCarrerasF1(),
+      fetchPartidosBarca()
+    ]);
+
+    if (resF1.status === 'fulfilled') {
+      setCarrerasF1(resF1.value);
+    } else {
+      console.error("Error al obtener carreras F1:", resF1.reason);
+      setErrorF1("No se pudo conectar con la API de Fórmula 1 en este momento.");
+    }
+
+    if (resBarca.status === 'fulfilled') {
+      setPartidosBarca(resBarca.value);
+    } else {
+      console.error("Error al obtener partidos del Barça:", resBarca.reason);
+      setErrorBarca("No se pudo conectar con la API del FC Barcelona en este momento.");
+    }
+
+    setCargando(false);
+  }, []);
 
   // Escuchar la base de datos de Firebase en tiempo real
   useEffect(() => {
@@ -33,15 +107,8 @@ export default function CalendarioDeportes() {
     return () => cancelarSuscripcion();
   }, []);
 
-  // Parsear fecha ISO (YYYY-MM-DD) al Date local para obtener toDateString() idéntico a Calendario.js
-  const obtenerFechaClave = (fechaIso: string): string => {
-    const [y, m, d] = fechaIso.split('-').map(Number);
-    return new Date(y, m - 1, d).toDateString();
-  };
-
-  // Comprobar si un evento ya está en la agenda familiar
-  const estaEnAgenda = (fechaIso: string, tituloBuscado: string): boolean => {
-    const fechaClave = obtenerFechaClave(fechaIso);
+  // Comprobar si un evento ya está en la agenda familiar usando la fechaClave
+  const estaEnAgenda = (fechaClave: string, tituloBuscado: string): boolean => {
     const eventosDelDia = eventosAgenda[fechaClave] || [];
     return eventosDelDia.some((e) => {
       const tit = typeof e === 'string' ? e : e.titulo;
@@ -51,15 +118,13 @@ export default function CalendarioDeportes() {
 
   // Guardar en la agenda de Firebase
   const agregarAAgenda = async (
-    fechaIso: string,
+    fechaClave: string,
     titulo: string,
     hora: string,
     etiquetaNotif: string
   ) => {
-    const fechaClave = obtenerFechaClave(fechaIso);
     const notasDelDia = eventosAgenda[fechaClave] || [];
 
-    // Evitar duplicados exactos
     const yaExiste = notasDelDia.some((e) => {
       const tit = typeof e === 'string' ? e : e.titulo;
       return tit === titulo;
@@ -74,7 +139,9 @@ export default function CalendarioDeportes() {
       titulo,
       hora: hora || "--:--",
       horaFin: "",
-      tipo: "normal" // Tipo normal para que se muestre en rojo/calendario general
+      tipo: "deporte",
+      categoria: "Deportes",
+      creador: ""
     };
 
     const nuevosEventos = {
@@ -100,9 +167,17 @@ export default function CalendarioDeportes() {
     }, 3500);
   };
 
-  const eventosFiltrados = obtenerEventosDeportivos(categoria);
-  // Mostrar los primeros 5 eventos según requerimiento
-  const eventosAMostrar = eventosFiltrados.slice(0, 5);
+  // Combinación y filtrado según pestaña seleccionada
+  let eventosAMostrar: EventoDeportivo[] = [];
+  if (categoria === 'todos') {
+    const unificados: EventoDeportivo[] = [...carrerasF1, ...partidosBarca];
+    unificados.sort((a, b) => a.timestampMs - b.timestampMs);
+    eventosAMostrar = unificados.slice(0, 5);
+  } else if (categoria === 'barca') {
+    eventosAMostrar = partidosBarca;
+  } else if (categoria === 'f1') {
+    eventosAMostrar = carrerasF1;
+  }
 
   return (
     <div style={{
@@ -218,7 +293,7 @@ export default function CalendarioDeportes() {
         </button>
       </div>
 
-      {/* ENCABEZADO DE SECCIÓN */}
+      {/* ENCABEZADO DE SECCIÓN CON BOTÓN DE RECARGA */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -228,67 +303,233 @@ export default function CalendarioDeportes() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '18px' }}>⚡</span>
           <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1e293b' }}>
-            Próximos Eventos Deportivos
+            Próximos Eventos Oficiales
           </h2>
         </div>
-        <span style={{
-          fontSize: '11px',
-          fontWeight: 700,
-          color: '#0047b3',
-          backgroundColor: '#eff6ff',
-          padding: '3px 8px',
-          borderRadius: '12px',
-          border: '1px solid #bfdbfe'
-        }}>
-          {eventosAMostrar.length} eventos
-        </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={recargarManual}
+            disabled={cargando}
+            title="Actualizar datos en vivo"
+            style={{
+              padding: '4px 8px',
+              backgroundColor: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: '#334155',
+              cursor: cargando ? 'default' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <span>{cargando ? '⏳' : '🔄'}</span>
+            <span>{cargando ? 'Cargando' : 'Actualizar'}</span>
+          </button>
+
+          <span style={{
+            fontSize: '11px',
+            fontWeight: 700,
+            color: '#0047b3',
+            backgroundColor: '#eff6ff',
+            padding: '3px 8px',
+            borderRadius: '12px',
+            border: '1px solid #bfdbfe'
+          }}>
+            Hora España (CEST)
+          </span>
+        </div>
       </div>
+
+      {/* ESTADO DE CARGA */}
+      {cargando && (
+        <div style={{
+          backgroundColor: '#121824',
+          borderRadius: '14px',
+          padding: '32px 20px',
+          textAlign: 'center',
+          color: '#94a3b8',
+          border: '1px solid #1f2937'
+        }}>
+          <div style={{ fontSize: '26px', marginBottom: '8px' }}>⏳</div>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: '#f8fafc' }}>
+            Consultando calendarios oficiales en vivo...
+          </span>
+          <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+            Sincronizando horarios con Jolpi F1 y TheSportsDB
+          </p>
+        </div>
+      )}
+
+      {/* ESTADO: LISTA VACÍA PARA FC BARCELONA */}
+      {!cargando && categoria === 'barca' && partidosBarca.length === 0 && (
+        <div style={{
+          backgroundColor: '#121824',
+          borderRadius: '14px',
+          border: '1px solid #1f2937',
+          padding: '24px 20px',
+          textAlign: 'center',
+          color: '#f8fafc'
+        }}>
+          <div style={{ fontSize: '32px', marginBottom: '10px' }}>🔵🔴</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 800 }}>
+            Sin partidos confirmados próximamente
+          </h3>
+          <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: '#94a3b8', lineHeight: 1.5 }}>
+            No se han encontrado partidos programados en la API oficial para el FC Barcelona. Esto suele ocurrir durante parones de selecciones nacionales, descanso de competición o fin de temporada.
+          </p>
+          {errorBarca && (
+            <p style={{ margin: '0 0 14px 0', fontSize: '12px', color: '#f87171' }}>
+              ℹ️ {errorBarca}
+            </p>
+          )}
+          <button
+            onClick={recargarManual}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#a50044',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Reintentar consulta 🔄
+          </button>
+        </div>
+      )}
+
+      {/* ESTADO: LISTA VACÍA PARA F1 */}
+      {!cargando && categoria === 'f1' && carrerasF1.length === 0 && (
+        <div style={{
+          backgroundColor: '#121824',
+          borderRadius: '14px',
+          border: '1px solid #1f2937',
+          padding: '24px 20px',
+          textAlign: 'center',
+          color: '#f8fafc'
+        }}>
+          <div style={{ fontSize: '32px', marginBottom: '10px' }}>🏎️</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 800 }}>
+            Sin carreras pendientes en el calendario actual
+          </h3>
+          <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: '#94a3b8', lineHeight: 1.5 }}>
+            No hay más Grandes Premios programados para las fechas venideras en la temporada en curso de Fórmula 1.
+          </p>
+          {errorF1 && (
+            <p style={{ margin: '0 0 14px 0', fontSize: '12px', color: '#f87171' }}>
+              ℹ️ {errorF1}
+            </p>
+          )}
+          <button
+            onClick={recargarManual}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#e10600',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Reintentar consulta 🔄
+          </button>
+        </div>
+      )}
+
+      {/* ESTADO: LISTA VACÍA EN "TODOS" */}
+      {!cargando && categoria === 'todos' && eventosAMostrar.length === 0 && (
+        <div style={{
+          backgroundColor: '#121824',
+          borderRadius: '14px',
+          border: '1px solid #1f2937',
+          padding: '24px 20px',
+          textAlign: 'center',
+          color: '#f8fafc'
+        }}>
+          <div style={{ fontSize: '32px', marginBottom: '10px' }}>🏆</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: 800 }}>
+            No hay eventos deportivos próximos
+          </h3>
+          <p style={{ margin: '0 0 14px 0', fontSize: '13px', color: '#94a3b8', lineHeight: 1.5 }}>
+            No se han registrado eventos inmediatos ni del FC Barcelona ni de Fórmula 1 en las APIs oficiales.
+          </p>
+          <button
+            onClick={recargarManual}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#0047b3',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Actualizar datos 🔄
+          </button>
+        </div>
+      )}
 
       {/* LISTA DE TARJETAS ESTILO OSCURO SOFASCORE */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
-        {eventosAMostrar.map((evento) => {
-          if (evento.tipo === 'barca') {
-            return (
-              <TarjetaBarca
-                key={evento.id}
-                evento={evento}
-                estaEnAgenda={estaEnAgenda(evento.fechaIso, evento.rival)}
-                onAgregar={() => agregarAAgenda(
-                  evento.fechaIso,
-                  `⚽ Barça vs ${evento.rival} (${evento.competicion})`,
-                  evento.hora,
-                  `Barça vs ${evento.rival}`
-                )}
-              />
-            );
-          }
+      {!cargando && eventosAMostrar.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
+          {eventosAMostrar.map((evento) => {
+            if (evento.tipo === 'barca') {
+              return (
+                <TarjetaBarca
+                  key={evento.id}
+                  evento={evento}
+                  estaEnAgenda={estaEnAgenda(evento.fechaClave, evento.rival)}
+                  onAgregar={() => agregarAAgenda(
+                    evento.fechaClave,
+                    `⚽ Barça vs ${evento.rival} (${evento.competicion})`,
+                    evento.hora,
+                    `Barça vs ${evento.rival}`
+                  )}
+                />
+              );
+            }
 
-          if (evento.tipo === 'f1') {
-            return (
-              <TarjetaF1
-                key={evento.id}
-                evento={evento}
-                carreraEnAgenda={estaEnAgenda(evento.carrera.fechaIso, `Carrera ${evento.granPremio}`)}
-                clasiEnAgenda={estaEnAgenda(evento.clasificacion.fechaIso, `Clasificación ${evento.granPremio}`)}
-                onAgregarCarrera={() => agregarAAgenda(
-                  evento.carrera.fechaIso,
-                  `🏎️ F1: Carrera ${evento.granPremio}`,
-                  evento.carrera.hora,
-                  `Carrera F1 (${evento.pais})`
-                )}
-                onAgregarClasi={() => agregarAAgenda(
-                  evento.clasificacion.fechaIso,
-                  `⏱️ F1: Clasificación ${evento.granPremio}`,
-                  evento.clasificacion.hora,
-                  `Clasificación F1 (${evento.pais})`
-                )}
-              />
-            );
-          }
+            if (evento.tipo === 'f1') {
+              return (
+                <TarjetaF1
+                  key={evento.id}
+                  evento={evento}
+                  carreraEnAgenda={estaEnAgenda(evento.carrera.fechaClave, `Carrera ${evento.granPremio}`)}
+                  clasiEnAgenda={evento.clasificacion ? estaEnAgenda(evento.clasificacion.fechaClave, `Clasificación ${evento.granPremio}`) : false}
+                  onAgregarCarrera={() => agregarAAgenda(
+                    evento.carrera.fechaClave,
+                    `🏎️ F1: Carrera ${evento.granPremio}`,
+                    evento.carrera.hora,
+                    `Carrera F1 (${evento.pais})`
+                  )}
+                  onAgregarClasi={() => {
+                    if (evento.clasificacion) {
+                      agregarAAgenda(
+                        evento.clasificacion.fechaClave,
+                        `⏱️ F1: Clasificación ${evento.granPremio}`,
+                        evento.clasificacion.hora,
+                        `Clasificación F1 (${evento.pais})`
+                      );
+                    }
+                  }}
+                />
+              );
+            }
 
-          return null;
-        })}
-      </div>
+            return null;
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -328,7 +569,7 @@ function TarjetaBarca({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontWeight: 800, color: '#38bdf8' }}>
-            {evento.competicion === 'Champions League' ? '🏆 UCL' : '🇪🇸 LaLiga'}
+            {evento.competicion}
           </span>
           <span style={{ color: '#64748b' }}>•</span>
           <span style={{ color: '#94a3b8', fontWeight: 600 }}>
@@ -400,7 +641,7 @@ function TarjetaBarca({
             <span style={{ display: 'block', fontSize: '15px', fontWeight: 800, color: '#f8fafc' }}>
               {evento.hora}
             </span>
-            <span style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>
+            <span style={{ fontSize: '10px', color: '#38bdf8', textTransform: 'uppercase', fontWeight: 700 }}>
               Hora ESP
             </span>
           </div>
@@ -431,9 +672,19 @@ function TarjetaBarca({
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: '16px',
-              border: '1px solid #334155'
+              border: '1px solid #334155',
+              overflow: 'hidden'
             }}>
-              {evento.escudoRival}
+              {evento.escudoRival ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img 
+                  src={evento.escudoRival} 
+                  alt={evento.rival} 
+                  style={{ width: '28px', height: '28px', objectFit: 'contain' }}
+                />
+              ) : (
+                '🛡️'
+              )}
             </div>
           </div>
         </div>
@@ -577,57 +828,73 @@ function TarjetaF1({
           gap: '10px',
           marginBottom: '14px'
         }}>
-          {/* SESIÓN CLASIFICACIÓN */}
-          <div style={{
-            backgroundColor: '#0a0d14',
-            borderRadius: '10px',
-            padding: '10px 12px',
-            border: '1px solid #232c3d',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between'
-          }}>
-            <div>
-              <span style={{
-                display: 'block',
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#f59e0b',
-                textTransform: 'uppercase',
-                letterSpacing: '0.4px',
-                marginBottom: '4px'
-              }}>
-                ⏱️ Clasificación
-              </span>
-              <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#f1f5f9' }}>
-                {evento.clasificacion.fechaTexto}
-              </span>
-              <span style={{ display: 'block', fontSize: '14px', fontWeight: 800, color: '#38bdf8', marginTop: '2px' }}>
-                {evento.clasificacion.hora}
-              </span>
-            </div>
+          {/* SESIÓN CLASIFICACIÓN (SI EXISTE) */}
+          {evento.clasificacion ? (
+            <div style={{
+              backgroundColor: '#0a0d14',
+              borderRadius: '10px',
+              padding: '10px 12px',
+              border: '1px solid #232c3d',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <span style={{
+                  display: 'block',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#f59e0b',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.4px',
+                  marginBottom: '4px'
+                }}>
+                  ⏱️ Clasificación
+                </span>
+                <span style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#f1f5f9' }}>
+                  {evento.clasificacion.fechaTexto}
+                </span>
+                <span style={{ display: 'block', fontSize: '14px', fontWeight: 800, color: '#38bdf8', marginTop: '2px' }}>
+                  {evento.clasificacion.hora} ESP
+                </span>
+              </div>
 
-            <button
-              onClick={onAgregarClasi}
-              disabled={clasiEnAgenda}
-              style={{
-                marginTop: '10px',
-                padding: '6px 8px',
-                borderRadius: '6px',
-                border: 'none',
-                cursor: clasiEnAgenda ? 'default' : 'pointer',
-                fontSize: '11px',
-                fontWeight: 700,
-                backgroundColor: clasiEnAgenda ? '#1e293b' : 'rgba(245, 158, 11, 0.2)',
-                color: clasiEnAgenda ? '#10b981' : '#f59e0b',
-                borderWidth: '1px',
-                borderStyle: 'solid',
-                borderColor: clasiEnAgenda ? '#334155' : 'rgba(245, 158, 11, 0.4)'
-              }}
-            >
-              {clasiEnAgenda ? '✓ En agenda' : '+ Añadir Clasi'}
-            </button>
-          </div>
+              <button
+                onClick={onAgregarClasi}
+                disabled={clasiEnAgenda}
+                style={{
+                  marginTop: '10px',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  cursor: clasiEnAgenda ? 'default' : 'pointer',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  backgroundColor: clasiEnAgenda ? '#1e293b' : 'rgba(245, 158, 11, 0.2)',
+                  color: clasiEnAgenda ? '#10b981' : '#f59e0b',
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  borderColor: clasiEnAgenda ? '#334155' : 'rgba(245, 158, 11, 0.4)'
+                }}
+              >
+                {clasiEnAgenda ? '✓ En agenda' : '+ Añadir Clasi'}
+              </button>
+            </div>
+          ) : (
+            <div style={{
+              backgroundColor: '#0a0d14',
+              borderRadius: '10px',
+              padding: '10px 12px',
+              border: '1px solid #232c3d',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#64748b',
+              fontSize: '12px'
+            }}>
+              <span>Clasificación por confirmar</span>
+            </div>
+          )}
 
           {/* CARRERA PRINCIPAL */}
           <div style={{
@@ -655,7 +922,7 @@ function TarjetaF1({
                 {evento.carrera.fechaTexto}
               </span>
               <span style={{ display: 'block', fontSize: '14px', fontWeight: 800, color: '#e10600', marginTop: '2px' }}>
-                {evento.carrera.hora}
+                {evento.carrera.hora} ESP
               </span>
             </div>
 
@@ -714,7 +981,7 @@ function TarjetaF1({
           {carreraEnAgenda ? (
             <>
               <span>✓</span>
-              <span>Carrera añadida a la agenda familiar</span>
+              <span>Carrera en la agenda familiar</span>
             </>
           ) : (
             <>
