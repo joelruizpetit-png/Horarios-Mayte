@@ -51,6 +51,57 @@ export default function CalendarioSemanal({
     tipo: "normal" 
   });
 
+  // Estado para eventos recurrentes (Pestaña Repetir)
+  const [diasRepeticion, setDiasRepeticion] = useState<number[]>([1]);
+  const [fechaInicioRep, setFechaInicioRep] = useState<string>('');
+  const [fechaFinRep, setFechaFinRep] = useState<string>('');
+  const [categoriaRepeticion, setCategoriaRepeticion] = useState<'normal' | 'trabajo'>('normal');
+
+  // Estado para modal de edición
+  const [mostrarModalEdicion, setMostrarModalEdicion] = useState<boolean>(false);
+  const [eventoAEditar, setEventoAEditar] = useState<{
+    index: number;
+    fechaClave: string;
+    titulo: string;
+    hora: string;
+    horaFin: string;
+    tipo: string;
+    creador: string;
+  }>({
+    index: -1,
+    fechaClave: '',
+    titulo: '',
+    hora: '',
+    horaFin: '',
+    tipo: 'normal',
+    creador: 'J'
+  });
+
+  const DIAS_SEMANA_OPCIONES = [
+    { num: 1, label: 'L', nombre: 'Lunes' },
+    { num: 2, label: 'M', nombre: 'Martes' },
+    { num: 3, label: 'X', nombre: 'Miércoles' },
+    { num: 4, label: 'J', nombre: 'Jueves' },
+    { num: 5, label: 'V', nombre: 'Viernes' },
+    { num: 6, label: 'S', nombre: 'Sábado' },
+    { num: 0, label: 'D', nombre: 'Domingo' }
+  ];
+
+  const toISODate = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const toggleDiaRepeticion = (num: number) => {
+    if (diasRepeticion.includes(num)) {
+      setDiasRepeticion(diasRepeticion.filter(d => d !== num));
+    } else {
+      setDiasRepeticion([...diasRepeticion, num]);
+    }
+  };
+
   const obtenerInicialCreador = () => {
     const email = usuario?.email || auth?.currentUser?.email || '';
     const emailLimpio = email.toLowerCase().trim();
@@ -127,20 +178,104 @@ export default function CalendarioSemanal({
 
   const abrirModalParaDia = (dia: Date) => {
     setFechaModal(dia);
+    const hoyStr = toISODate(dia);
+    setFechaInicioRep(hoyStr);
+
+    const fin = new Date(dia);
+    if (fin.getMonth() >= 8) {
+      fin.setFullYear(fin.getFullYear() + 1);
+      fin.setMonth(5);
+      fin.setDate(30);
+    } else {
+      fin.setMonth(5);
+      fin.setDate(30);
+    }
+    setFechaFinRep(toISODate(fin));
+    setDiasRepeticion([dia.getDay()]);
+    setCategoriaRepeticion('normal');
     setNuevoEvento({ titulo: "", hora: "", horaFin: "", tipo: "normal" });
     setMostrarModal(true);
   };
 
   const guardarNota = async () => {
-    if (!nuevoEvento.titulo) return;
+    if (!nuevoEvento.titulo.trim()) {
+      alert("Por favor, introduce un título para el evento.");
+      return;
+    }
 
+    // MODO REPETIR (RECURRENTE / EXTRAESCOLAR)
+    if (nuevoEvento.tipo === 'repetir') {
+      if (diasRepeticion.length === 0) {
+        alert("Por favor, selecciona al menos un día de la semana para repetir el evento.");
+        return;
+      }
+      if (!fechaInicioRep || !fechaFinRep) {
+        alert("Por favor, indica tanto la fecha de inicio como la de fin.");
+        return;
+      }
+
+      const [anoIni, mesIni, diaIni] = fechaInicioRep.split('-').map(Number);
+      const inicio = new Date(anoIni, mesIni - 1, diaIni);
+
+      const [anoFin, mesFin, diaFin] = fechaFinRep.split('-').map(Number);
+      const fin = new Date(anoFin, mesFin - 1, diaFin);
+
+      if (inicio > fin) {
+        alert("La fecha de inicio debe ser anterior o igual a la fecha de fin.");
+        return;
+      }
+
+      const nuevosEventos = { ...eventos };
+      let eventosCreados = 0;
+      const actual = new Date(inicio);
+
+      while (actual <= fin) {
+        const diaSemana = actual.getDay();
+        if (diasRepeticion.includes(diaSemana)) {
+          const fechaClave = actual.toDateString();
+          const notasDelDia = nuevosEventos[fechaClave] || [];
+
+          const eventoAGuardar: Evento = {
+            titulo: nuevoEvento.titulo.trim(),
+            hora: nuevoEvento.hora || "--:--",
+            horaFin: categoriaRepeticion === 'trabajo' ? (nuevoEvento.horaFin || "") : "",
+            tipo: categoriaRepeticion,
+            creador: obtenerInicialCreador()
+          };
+
+          nuevosEventos[fechaClave] = [...notasDelDia, eventoAGuardar];
+          eventosCreados++;
+        }
+        actual.setDate(actual.getDate() + 1);
+        if (eventosCreados > 600) break;
+      }
+
+      if (eventosCreados === 0) {
+        alert("No coincide ningún día de la semana seleccionado dentro del rango de fechas.");
+        return;
+      }
+
+      setEventos(nuevosEventos);
+      setMostrarModal(false);
+      setNuevoEvento({ titulo: "", hora: "", horaFin: "", tipo: "normal" });
+
+      try {
+        await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+      } catch (error) {
+        console.error("Error al guardar eventos recurrentes:", error);
+        alert("Error al guardar en la nube");
+      }
+      return;
+    }
+
+    // MODO NORMAL O TRABAJO
     const fechaClave = fechaModal.toDateString();
     const notasDelDia = eventos[fechaClave] || [];
     
     const eventoAGuardar: Evento = {
-      titulo: nuevoEvento.titulo,
+      titulo: nuevoEvento.titulo.trim(),
       hora: nuevoEvento.hora || "--:--",
-      horaFin: nuevoEvento.horaFin || "",
+      horaFin: nuevoEvento.tipo === 'trabajo' ? (nuevoEvento.horaFin || "") : "",
       tipo: nuevoEvento.tipo || "normal",
       creador: obtenerInicialCreador()
     };
@@ -162,7 +297,77 @@ export default function CalendarioSemanal({
     }
   };
 
+  const abrirModalEdicion = (fechaClave: string, nota: Evento | string, index: number) => {
+    const esAntigua = typeof nota === 'string';
+    setEventoAEditar({
+      index,
+      fechaClave,
+      titulo: esAntigua ? nota : (nota.titulo || ''),
+      hora: esAntigua ? '' : (nota.hora || ''),
+      horaFin: (!esAntigua && nota.horaFin) ? nota.horaFin : '',
+      tipo: (!esAntigua && nota.tipo) ? nota.tipo : 'normal',
+      creador: (!esAntigua && (nota as Evento).creador) ? (nota as Evento).creador! : 'J'
+    });
+    setMostrarModalEdicion(true);
+  };
+
+  const guardarEdicion = async () => {
+    if (!eventoAEditar.titulo.trim()) {
+      alert("Por favor, introduce un título para el evento.");
+      return;
+    }
+
+    const fechaClave = eventoAEditar.fechaClave;
+    const notasDelDia = [...(eventos[fechaClave] || [])];
+    if (eventoAEditar.index < 0 || eventoAEditar.index >= notasDelDia.length) return;
+
+    notasDelDia[eventoAEditar.index] = {
+      titulo: eventoAEditar.titulo.trim(),
+      hora: eventoAEditar.hora || "--:--",
+      horaFin: eventoAEditar.tipo === 'trabajo' ? (eventoAEditar.horaFin || '') : '',
+      tipo: eventoAEditar.tipo,
+      creador: eventoAEditar.creador || obtenerInicialCreador()
+    };
+
+    const nuevosEventos = {
+      ...eventos,
+      [fechaClave]: notasDelDia
+    };
+
+    setEventos(nuevosEventos);
+    setMostrarModalEdicion(false);
+
+    try {
+      await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+    } catch (error) {
+      console.error("Error al actualizar evento:", error);
+      alert("Error al actualizar el evento en la nube");
+    }
+  };
+
+  const eliminarEventoDesdeModal = async () => {
+    if (!window.confirm("¿Estás seguro de que deseas eliminar este evento?")) {
+      return;
+    }
+    const fechaClave = eventoAEditar.fechaClave;
+    const nuevasNotas = (eventos[fechaClave] || []).filter((_, i) => i !== eventoAEditar.index);
+    const nuevosEventos = { ...eventos, [fechaClave]: nuevasNotas };
+
+    setEventos(nuevosEventos);
+    setMostrarModalEdicion(false);
+
+    try {
+      await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+    } catch (error) {
+      console.error("Error al eliminar evento:", error);
+      alert("Error al eliminar el evento en la nube");
+    }
+  };
+
   const borrarNota = async (fechaClave: string, index: number) => {
+    if (!window.confirm("¿Estás seguro de que deseas eliminar este evento?")) {
+      return;
+    }
     const notasActuales = eventos[fechaClave] || [];
     const nuevasNotas = notasActuales.filter((_, i) => i !== index);
     const nuevosEventos = { ...eventos, [fechaClave]: nuevasNotas };
@@ -410,6 +615,8 @@ export default function CalendarioSemanal({
                     return (
                       <div
                         key={i}
+                        onClick={() => abrirModalEdicion(claveDia, nota, i)}
+                        title="Haz clic para editar este evento"
                         style={{
                           display: 'flex',
                           justifyContent: 'space-between',
@@ -418,7 +625,15 @@ export default function CalendarioSemanal({
                           backgroundColor: bgColor,
                           border: '1px solid #e5e7eb',
                           borderLeft: `4px solid ${borderColor}`,
-                          borderRadius: '6px'
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.backgroundColor = esDeporte ? '#fef9c3' : (esTrabajo ? '#e0f2fe' : '#f3f4f6');
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.backgroundColor = bgColor;
                         }}
                       >
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -469,8 +684,12 @@ export default function CalendarioSemanal({
                         </div>
 
                         <button
-                          onClick={() => borrarNota(claveDia, i)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            borrarNota(claveDia, i);
+                          }}
                           title="Eliminar evento"
+                          aria-label="Borrar nota"
                           style={{
                             background: 'none',
                             border: 'none',
@@ -493,7 +712,7 @@ export default function CalendarioSemanal({
         })}
       </div>
 
-      {/* MODAL PARA CREAR EVENTO EN DÍA SELECCIONADO */}
+      {/* MODAL PARA CREAR EVENTO EN DÍA SELECCIONADO (NORMAL, TRABAJO O REPETIR) */}
       {mostrarModal && (
         <div style={{
           position: "fixed",
@@ -514,32 +733,42 @@ export default function CalendarioSemanal({
             padding: "24px", 
             borderRadius: "14px", 
             width: "100%", 
-            maxWidth: "360px", 
+            maxWidth: "380px", 
             boxShadow: "0 12px 30px rgba(0,0,0,0.25)",
-            border: "1px solid #e5e7eb"
+            border: "1px solid #e5e7eb",
+            maxHeight: "90vh",
+            overflowY: "auto"
           }}>
-            <h3 style={{ margin: "0 0 6px 0", color: "#111827", fontSize: "18px", fontWeight: "800" }}>
-              Nuevo Evento
-            </h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <h3 style={{ margin: 0, color: "#111827", fontSize: "18px", fontWeight: "800" }}>
+                Nuevo Evento
+              </h3>
+              <button 
+                onClick={() => setMostrarModal(false)}
+                style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "#9ca3af" }}
+              >
+                ✕
+              </button>
+            </div>
             <p style={{ margin: "0 0 16px 0", color: "#0047b3", fontSize: "13px", fontWeight: "600" }}>
               📅 {fechaModal.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
             
-            {/* SELECTOR DE TIPO */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+            {/* SELECTOR DE TIPO: NORMAL, TRABAJO O REPETIR */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
               <button 
                 type="button"
                 onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'normal', titulo: ''})}
                 style={{ 
                   flex: 1,
-                  padding: '9px',
+                  padding: '8px 4px',
                   borderRadius: '8px',
-                  border: nuevoEvento.tipo === 'normal' ? '2px solid #111827' : '1px solid #d1d5db',
+                  border: nuevoEvento.tipo === 'normal' ? '2px solid #ef4444' : '1px solid #d1d5db',
                   cursor: 'pointer',
-                  backgroundColor: nuevoEvento.tipo === 'normal' ? '#f3f4f6' : '#ffffff',
-                  color: '#111827',
+                  backgroundColor: nuevoEvento.tipo === 'normal' ? '#fef2f2' : '#ffffff',
+                  color: nuevoEvento.tipo === 'normal' ? '#ef4444' : '#374151',
                   fontWeight: nuevoEvento.tipo === 'normal' ? '800' : '600',
-                  fontSize: '13px'
+                  fontSize: '12px'
                 }}
               >
                 🎈 Normal
@@ -549,26 +778,148 @@ export default function CalendarioSemanal({
                 onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'trabajo', titulo: 'Turno de Trabajo'})}
                 style={{ 
                   flex: 1,
-                  padding: '9px',
+                  padding: '8px 4px',
                   borderRadius: '8px',
-                  border: nuevoEvento.tipo === 'trabajo' ? '2px solid #0070f3' : '1px solid #d1d5db',
+                  border: nuevoEvento.tipo === 'trabajo' ? '2px solid #111827' : '1px solid #d1d5db',
                   cursor: 'pointer',
-                  backgroundColor: nuevoEvento.tipo === 'trabajo' ? '#eff6ff' : '#ffffff',
-                  color: '#0070f3', 
+                  backgroundColor: nuevoEvento.tipo === 'trabajo' ? '#f3f4f6' : '#ffffff',
+                  color: '#111827', 
                   fontWeight: nuevoEvento.tipo === 'trabajo' ? '800' : '600',
-                  fontSize: '13px'
+                  fontSize: '12px'
                 }}
               >
                 💼 Trabajo
               </button>
+              <button 
+                type="button"
+                onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'repetir', titulo: ''})}
+                style={{ 
+                  flex: 1,
+                  padding: '8px 4px',
+                  borderRadius: '8px',
+                  border: nuevoEvento.tipo === 'repetir' ? '2px solid #0047b3' : '1px solid #d1d5db',
+                  cursor: 'pointer',
+                  backgroundColor: nuevoEvento.tipo === 'repetir' ? '#eff6ff' : '#ffffff',
+                  color: '#0047b3', 
+                  fontWeight: nuevoEvento.tipo === 'repetir' ? '800' : '600',
+                  fontSize: '12px'
+                }}
+              >
+                🔁 Repetir
+              </button>
             </div>
+
+            {/* SECCIÓN ESPECÍFICA CUANDO SE ELIGE 'REPETIR' */}
+            {nuevoEvento.tipo === 'repetir' && (
+              <div style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '14px' }}>
+                {/* Categoría base del evento recurrente */}
+                <div style={{ marginBottom: "10px" }}>
+                  <label style={{ display: "block", marginBottom: "4px", fontWeight: "700", color: "#374151", fontSize: "12px" }}>
+                    Categoría:
+                  </label>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setCategoriaRepeticion('normal')}
+                      style={{
+                        flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer',
+                        border: categoriaRepeticion === 'normal' ? '2px solid #ef4444' : '1px solid #d1d5db',
+                        backgroundColor: categoriaRepeticion === 'normal' ? '#fef2f2' : '#ffffff',
+                        color: categoriaRepeticion === 'normal' ? '#ef4444' : '#374151',
+                        fontWeight: '700', fontSize: '11px'
+                      }}
+                    >
+                      🎈 Normal / Extraescolar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCategoriaRepeticion('trabajo')}
+                      style={{
+                        flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer',
+                        border: categoriaRepeticion === 'trabajo' ? '2px solid #111827' : '1px solid #d1d5db',
+                        backgroundColor: categoriaRepeticion === 'trabajo' ? '#f3f4f6' : '#ffffff',
+                        color: '#111827',
+                        fontWeight: '700', fontSize: '11px'
+                      }}
+                    >
+                      💼 Trabajo
+                    </button>
+                  </div>
+                </div>
+
+                {/* Días de la semana */}
+                <div style={{ marginBottom: "10px" }}>
+                  <label style={{ display: "block", marginBottom: "6px", fontWeight: "700", color: "#374151", fontSize: "12px" }}>
+                    Días que se repite:
+                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "3px" }}>
+                    {DIAS_SEMANA_OPCIONES.map((d) => {
+                      const sel = diasRepeticion.includes(d.num);
+                      return (
+                        <button
+                          key={d.num}
+                          type="button"
+                          title={d.nombre}
+                          onClick={() => toggleDiaRepeticion(d.num)}
+                          style={{
+                            flex: 1,
+                            height: "34px",
+                            borderRadius: "6px",
+                            border: sel ? "none" : "1px solid #cbd5e1",
+                            backgroundColor: sel ? "#0047b3" : "#ffffff",
+                            color: sel ? "#ffffff" : "#475569",
+                            fontWeight: 800,
+                            fontSize: "12px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          {d.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Rango de fechas */}
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: "block", marginBottom: "4px", fontWeight: "700", fontSize: "11px", color: "#475569" }}>
+                      Inicio 📅
+                    </label>
+                    <input
+                      type="date"
+                      value={fechaInicioRep}
+                      onChange={(e) => setFechaInicioRep(e.target.value)}
+                      style={{
+                        width: "100%", padding: "7px 8px", borderRadius: "6px",
+                        border: "1px solid #cbd5e1", backgroundColor: "#ffffff", color: "#111827", fontSize: "12px", outline: "none"
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: "block", marginBottom: "4px", fontWeight: "700", fontSize: "11px", color: "#475569" }}>
+                      Fin 🏁
+                    </label>
+                    <input
+                      type="date"
+                      value={fechaFinRep}
+                      onChange={(e) => setFechaFinRep(e.target.value)}
+                      style={{
+                        width: "100%", padding: "7px 8px", borderRadius: "6px",
+                        border: "1px solid #cbd5e1", backgroundColor: "#ffffff", color: "#111827", fontSize: "12px", outline: "none"
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
               Título:
             </label>
             <input 
               type="text"
-              placeholder="Ej: Cena familiar, Consulta médica..."
+              placeholder={nuevoEvento.tipo === 'repetir' ? "Ej: Natación, Fútbol, Inglés..." : "Ej: Cena familiar, Consulta médica..."}
               value={nuevoEvento.titulo}
               onChange={(e) => setNuevoEvento({...nuevoEvento, titulo: e.target.value})}
               style={{ 
@@ -584,7 +935,8 @@ export default function CalendarioSemanal({
               }}
             />
             
-            {nuevoEvento.tipo === 'normal' ? (
+            {/* INPUTS DE HORA SEGÚN TIPO */}
+            {(nuevoEvento.tipo === 'normal' || (nuevoEvento.tipo === 'repetir' && categoriaRepeticion === 'normal')) ? (
               <>
                 <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
                   Hora:
@@ -651,7 +1003,7 @@ export default function CalendarioSemanal({
               </div>
             )}
 
-            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: '8px' }}>
               <button 
                 type="button"
                 onClick={() => setMostrarModal(false)} 
@@ -673,7 +1025,7 @@ export default function CalendarioSemanal({
                 onClick={guardarNota} 
                 style={{
                   padding: "9px 18px",
-                  backgroundColor: "#0047b3",
+                  backgroundColor: nuevoEvento.tipo === 'repetir' ? "#0047b3" : "#111827",
                   color: "white",
                   border: "none",
                   borderRadius: "8px",
@@ -683,8 +1035,178 @@ export default function CalendarioSemanal({
                   boxShadow: "0 2px 4px rgba(0, 71, 179, 0.3)"
                 }}
               >
-                Guardar
+                {nuevoEvento.tipo === 'repetir' ? "Generar Repetición" : "Guardar"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PARA EDITAR Y ELIMINAR EVENTO EXISTENTE */}
+      {mostrarModalEdicion && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          backgroundColor: "rgba(0,0,0,0.5)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 1000,
+          padding: "16px"
+        }}>
+          <div 
+            style={{ 
+              backgroundColor: "#ffffff", 
+              color: "#111827",
+              padding: "24px", 
+              borderRadius: "14px", 
+              width: "100%", 
+              maxWidth: "380px", 
+              boxShadow: "0 12px 30px rgba(0,0,0,0.25)",
+              border: "1px solid #e5e7eb",
+              maxHeight: "90vh",
+              overflowY: "auto"
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <h3 style={{ margin: 0, color: "#111827", fontSize: "18px", fontWeight: "800" }}>
+                ✏️ Editar Evento
+              </h3>
+              <button 
+                onClick={() => setMostrarModalEdicion(false)}
+                style={{ background: "none", border: "none", fontSize: "18px", cursor: "pointer", color: "#9ca3af" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ margin: "0 0 14px 0", color: "#0047b3", fontSize: "13px", fontWeight: "600" }}>
+              📅 {eventoAEditar.fechaClave}
+            </p>
+
+            {/* SELECTOR DE CATEGORÍA */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+              <button 
+                type="button"
+                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'normal'})}
+                style={{ 
+                  flex: 1, padding: '8px', borderRadius: '8px',
+                  border: eventoAEditar.tipo === 'normal' ? '2px solid #ef4444' : '1px solid #d1d5db',
+                  cursor: 'pointer',
+                  backgroundColor: eventoAEditar.tipo === 'normal' ? '#fef2f2' : '#ffffff',
+                  color: eventoAEditar.tipo === 'normal' ? '#ef4444' : '#111827',
+                  fontWeight: eventoAEditar.tipo === 'normal' ? '800' : '600',
+                  fontSize: '13px'
+                }}
+              >
+                🎈 Normal
+              </button>
+              <button 
+                type="button"
+                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'trabajo'})}
+                style={{ 
+                  flex: 1, padding: '8px', borderRadius: '8px',
+                  border: eventoAEditar.tipo === 'trabajo' ? '2px solid #111827' : '1px solid #d1d5db',
+                  cursor: 'pointer',
+                  backgroundColor: eventoAEditar.tipo === 'trabajo' ? '#f3f4f6' : '#ffffff',
+                  color: '#111827', 
+                  fontWeight: eventoAEditar.tipo === 'trabajo' ? '800' : '600',
+                  fontSize: '13px'
+                }}
+              >
+                💼 Trabajo
+              </button>
+            </div>
+
+            <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
+              Título:
+            </label>
+            <input 
+              type="text" 
+              value={eventoAEditar.titulo}
+              onChange={(e) => setEventoAEditar({...eventoAEditar, titulo: e.target.value})}
+              style={{ 
+                width: "100%", padding: "10px", marginBottom: "14px", borderRadius: "8px", 
+                border: "1px solid #d1d5db", backgroundColor: "#ffffff", color: "#111827", fontSize: "14px", outline: "none" 
+              }}
+            />
+            
+            {eventoAEditar.tipo === 'normal' ? (
+              <>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
+                  Hora:
+                </label>
+                <input 
+                  type="time" 
+                  value={eventoAEditar.hora}
+                  onChange={(e) => setEventoAEditar({...eventoAEditar, hora: e.target.value})}
+                  style={{ 
+                    width: "100%", padding: "10px", marginBottom: "18px", borderRadius: "8px", 
+                    border: "1px solid #d1d5db", backgroundColor: "#ffffff", color: "#111827", fontSize: "14px", outline: "none" 
+                  }}
+                />
+              </>
+            ) : (
+              <div style={{ display: "flex", gap: "10px", marginBottom: "18px" }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", fontSize: "12px", color: "#374151" }}>Entrada ☀️</label>
+                  <input 
+                    type="time" 
+                    value={eventoAEditar.hora}
+                    onChange={(e) => setEventoAEditar({...eventoAEditar, hora: e.target.value})}
+                    style={{ 
+                      width: "100%", padding: "10px", borderRadius: "8px", 
+                      border: "1px solid #d1d5db", backgroundColor: "#ffffff", color: "#111827", fontSize: "13px", outline: "none" 
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", fontSize: "12px", color: "#374151" }}>Salida 🌙</label>
+                  <input 
+                    type="time" 
+                    value={eventoAEditar.horaFin}
+                    onChange={(e) => setEventoAEditar({...eventoAEditar, horaFin: e.target.value})}
+                    style={{ 
+                      width: "100%", padding: "10px", borderRadius: "8px", 
+                      border: "1px solid #d1d5db", backgroundColor: "#ffffff", color: "#111827", fontSize: "13px", outline: "none" 
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* BOTONES DE EDICIÓN / ELIMINACIÓN */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "10px" }}>
+              <button 
+                type="button"
+                onClick={eliminarEventoDesdeModal} 
+                style={{ 
+                  padding: "8px 14px", backgroundColor: "#fef2f2", color: "#dc2626", 
+                  border: "1px solid #fecaca", borderRadius: "8px", cursor: "pointer", fontWeight: "700", fontSize: "13px" 
+                }}
+              >
+                🗑️ Eliminar
+              </button>
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button 
+                  type="button"
+                  onClick={() => setMostrarModalEdicion(false)} 
+                  style={{ padding: "8px 14px", backgroundColor: "#f3f4f6", color: "#374151", border: "1px solid #d1d5db", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  onClick={guardarEdicion} 
+                  style={{ padding: "8px 16px", backgroundColor: "#0047b3", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "700", fontSize: "13px" }}
+                >
+                  Guardar Cambios
+                </button>
+              </div>
             </div>
           </div>
         </div>
