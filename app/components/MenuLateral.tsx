@@ -4,8 +4,8 @@ import React, { useEffect } from 'react';
 interface MenuLateralProps {
   abierto: boolean;
   onCerrar: () => void;
-  seccionActiva: 'planificador' | 'finanzas';
-  onCambiarSeccion: (seccion: 'planificador' | 'finanzas') => void;
+  seccionActiva: 'planificador' | 'finanzas' | 'lista-compra';
+  onCambiarSeccion: (seccion: 'planificador' | 'finanzas' | 'lista-compra') => void;
   usuario: {
     displayName?: string | null;
     email?: string | null;
@@ -321,6 +321,72 @@ export default function MenuLateral({
                 height: '8px',
                 borderRadius: '50%',
                 backgroundColor: '#047857',
+                flexShrink: 0
+              }} />
+            )}
+          </button>
+
+          {/* OPCIÓN 3: LISTA DE LA COMPRA */}
+          <button
+            onClick={() => {
+              onCambiarSeccion('lista-compra');
+              onCerrar();
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px 14px',
+              borderRadius: '12px',
+              border: seccionActiva === 'lista-compra' ? '2px solid #bae6fd' : '1px solid #f1f5f9',
+              backgroundColor: seccionActiva === 'lista-compra' ? '#f0f9ff' : '#ffffff',
+              color: seccionActiva === 'lista-compra' ? '#0284c7' : '#334155',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'all 0.15s ease',
+              width: '100%',
+              boxShadow: seccionActiva === 'lista-compra' ? '0 2px 8px rgba(2, 132, 199, 0.08)' : 'none'
+            }}
+            onMouseOver={(e) => {
+              if (seccionActiva !== 'lista-compra') {
+                e.currentTarget.style.backgroundColor = '#f8fafc';
+                e.currentTarget.style.borderColor = '#e2e8f0';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (seccionActiva !== 'lista-compra') {
+                e.currentTarget.style.backgroundColor = '#ffffff';
+                e.currentTarget.style.borderColor = '#f1f5f9';
+              }
+            }}
+          >
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: seccionActiva === 'lista-compra' ? '#e0f2fe' : '#f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '18px',
+              flexShrink: 0
+            }}>
+              🛒
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '14px', fontWeight: 800 }}>
+                Lista de la Compra
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500, marginTop: '2px' }}>
+                Artículos, Carrito y Finanzas
+              </div>
+            </div>
+            {seccionActiva === 'lista-compra' && (
+              <span style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: '#0284c7',
                 flexShrink: 0
               }} />
             )}

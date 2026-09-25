@@ -7,6 +7,7 @@ import CalendarioDeportes from './components/CalendarioDeportes';
 import MenuEscolarAlma from './components/MenuEscolarAlma';
 import MenuLateral from './components/MenuLateral';
 import FinanzasFamiliares from './components/FinanzasFamiliares';
+import ListaCompra from './components/ListaCompra';
 import { auth } from './firebase';
 import {
   signInWithEmailAndPassword,
@@ -25,7 +26,7 @@ const CORREOS_AUTORIZADOS = [
 export default function Home() {
   const [usuario, setUsuario] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [seccionPrincipal, setSeccionPrincipal] = useState<'planificador' | 'finanzas'>('planificador');
+  const [seccionPrincipal, setSeccionPrincipal] = useState<'planificador' | 'finanzas' | 'lista-compra'>('planificador');
   const [menuLateralAbierto, setMenuLateralAbierto] = useState<boolean>(false);
   const [tabActiva, setTabActiva] = useState<string>('general');
   const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(new Date());
@@ -145,6 +146,11 @@ export default function Home() {
         >
           {seccionPrincipal === 'finanzas' ? (
             <FinanzasFamiliares usuario={usuario} />
+          ) : seccionPrincipal === 'lista-compra' ? (
+            <ListaCompra 
+              usuario={usuario} 
+              onIrAFinanzas={() => setSeccionPrincipal('finanzas')} 
+            />
           ) : (
             <>
               {tabActiva === 'general' && (
