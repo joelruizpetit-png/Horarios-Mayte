@@ -8,6 +8,7 @@ import MenuEscolarAlma from './components/MenuEscolarAlma';
 import MenuLateral from './components/MenuLateral';
 import FinanzasFamiliares from './components/FinanzasFamiliares';
 import ListaCompra from './components/ListaCompra';
+import ModalNovedades from './components/ModalNovedades';
 import { auth } from './firebase';
 import {
   signInWithEmailAndPassword,
@@ -122,6 +123,9 @@ export default function Home() {
           usuario={usuario}
           onCerrarSesion={cerrarSesion}
         />
+
+        {/* MODAL DE NOVEDADES Y CAMBIOS RECIENTES */}
+        <ModalNovedades usuario={usuario} />
 
         {/* CABECERA SUPERIOR ESTILO SOFASCORE */}
         <HeaderSofascore

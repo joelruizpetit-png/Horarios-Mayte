@@ -14,6 +14,7 @@ import {
   getDocs,
   setDoc
 } from 'firebase/firestore';
+import { registrarActividad } from '../utils/actividad';
 
 export interface MovimientoFinanciero {
   id?: string;
@@ -403,6 +404,13 @@ export default function FinanzasFamiliares({ usuario }: FinanzasFamiliaresProps)
         creadoEn: new Date().toISOString()
       });
 
+      const tipoTxt = formulario.tipo === 'gasto' ? 'gasto' : 'ingreso';
+      registrarActividad({
+        seccion: 'finanzas',
+        descripcion: `Nuevo ${tipoTxt}: ${importeNum.toFixed(2)} € en ${formulario.categoria} ("${formulario.concepto.trim()}")`,
+        usuarioEmail: usuario?.email || '',
+      });
+
       setMostrarModal(false);
       // Si el movimiento se registró en otro mes al visualizado, navegar a ese mes
       if (mesAnoMov !== mesAnoClave) {
@@ -478,6 +486,13 @@ export default function FinanzasFamiliares({ usuario }: FinanzasFamiliaresProps)
         tipo: formularioEdicion.tipo,
         actualizadoEn: new Date().toISOString(),
         actualizadoPor: usuario?.email || 'usuario'
+      });
+
+      const tipoTxt = formularioEdicion.tipo === 'gasto' ? 'gasto' : 'ingreso';
+      registrarActividad({
+        seccion: 'finanzas',
+        descripcion: `${tipoTxt.charAt(0).toUpperCase() + tipoTxt.slice(1)} editado: ${importeNum.toFixed(2)} € en ${formularioEdicion.categoria} ("${formularioEdicion.concepto.trim()}")`,
+        usuarioEmail: usuario?.email || '',
       });
 
       setMovimientoEditando(null);

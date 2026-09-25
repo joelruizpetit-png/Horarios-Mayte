@@ -4,6 +4,7 @@ import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { db, auth } from '../firebase'; 
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { registrarActividad } from '../utils/actividad';
 
 /**
  * @param {{ usuario?: any, fechaSeleccionada?: Date, onFechaChange?: (fecha: Date) => void }} [props]
@@ -194,6 +195,11 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
 
       try {
         await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+        registrarActividad({
+          seccion: 'agenda',
+          descripcion: `Nuevo evento recurrente: "${nuevoEvento.titulo.trim()}" (${eventosCreados} días)`,
+          usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
+        });
       } catch (error) {
         console.error("Error al guardar eventos recurrentes:", error);
         alert("Error al guardar en la nube");
@@ -224,6 +230,12 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
 
     try {
       await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+      const fechaFormato = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+      registrarActividad({
+        seccion: 'agenda',
+        descripcion: `Nuevo evento: "${nuevoEvento.titulo.trim()}" (${nuevoEvento.hora || 'Todo el día'}) para el ${fechaFormato}`,
+        usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
+      });
     } catch (error) {
       console.error("Error al guardar:", error);
       alert("Error al guardar en la nube");
@@ -272,6 +284,11 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
 
     try {
       await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+      registrarActividad({
+        seccion: 'agenda',
+        descripcion: `Evento editado: "${eventoAEditar.titulo.trim()}" (${eventoAEditar.hora || 'Todo el día'})`,
+        usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
+      });
     } catch (error) {
       console.error("Error al actualizar evento:", error);
       alert("Error al actualizar el evento en la nube");

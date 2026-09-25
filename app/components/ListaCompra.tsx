@@ -9,6 +9,7 @@ import {
   doc,
   onSnapshot
 } from 'firebase/firestore';
+import { registrarActividad } from '../utils/actividad';
 
 export interface ArticuloCompra {
   id?: string;
@@ -141,6 +142,13 @@ export default function ListaCompra({ usuario, onIrAFinanzas }: ListaCompraProps
 
       setNuevoNombre('');
       setNuevaCantidad('');
+
+      const cantTxt = nuevaCantidad.trim() ? ` (${nuevaCantidad.trim()})` : '';
+      registrarActividad({
+        seccion: 'lista_compra',
+        descripcion: `Artículo añadido: "${texto}"${cantTxt} en ${nuevaCategoria}`,
+        usuarioEmail: usuario?.email || '',
+      });
     } catch (error) {
       console.error('Error al añadir artículo a la lista:', error);
       alert('Error al añadir el artículo. Inténtalo de nuevo.');
@@ -234,6 +242,12 @@ export default function ListaCompra({ usuario, onIrAFinanzas }: ListaCompraProps
       setMostrarModalGasto(false);
       setMensajeExito(`¡Compra de ${impNum.toFixed(2)} € registrada en Finanzas y productos comprados archivados!`);
       setTimeout(() => setMensajeExito(null), 6000);
+
+      registrarActividad({
+        seccion: 'lista_compra',
+        descripcion: `Compra finalizada: ${impNum.toFixed(2)} € pagados (${nombresComprados.length} artículos comprados archivados)`,
+        usuarioEmail: usuario?.email || '',
+      });
     } catch (error) {
       console.error('Error al finalizar compra y registrar gasto:', error);
       alert('Ocurrió un error al registrar el gasto en Finanzas.');
