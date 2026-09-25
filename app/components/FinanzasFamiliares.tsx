@@ -5,6 +5,7 @@ import {
   collection,
   addDoc,
   deleteDoc,
+  updateDoc,
   doc,
   onSnapshot,
   query,
@@ -100,6 +101,17 @@ export default function FinanzasFamiliares({ usuario }: FinanzasFamiliaresProps)
   // Estado del modal de registro
   const [mostrarModal, setMostrarModal] = useState<boolean>(false);
   const [guardando, setGuardando] = useState<boolean>(false);
+
+  // Estado del modal de edición de movimientos
+  const [movimientoEditando, setMovimientoEditando] = useState<MovimientoFinanciero | null>(null);
+  const [formularioEdicion, setFormularioEdicion] = useState({
+    importe: '',
+    concepto: '',
+    fecha: '',
+    categoria: 'Alimentación',
+    tipo: 'gasto' as 'gasto' | 'ingreso'
+  });
+  const [guardandoEdicion, setGuardandoEdicion] = useState<boolean>(false);
 
   // Estados para Saldo Anterior / Ahorro Acumulado
   const [saldoAnterior, setSaldoAnterior] = useState<number>(0);
@@ -417,6 +429,88 @@ export default function FinanzasFamiliares({ usuario }: FinanzasFamiliaresProps)
     } catch (error) {
       console.error('Error al eliminar movimiento:', error);
       alert('Hubo un error al eliminar el movimiento de la nube.');
+    }
+  };
+
+  // Abrir modal de edición con los datos del movimiento cargados
+  const abrirModalEditar = (mov: MovimientoFinanciero) => {
+    setMovimientoEditando(mov);
+    setFormularioEdicion({
+      importe: String(mov.importe),
+      concepto: mov.concepto,
+      fecha: mov.fecha,
+      categoria: mov.categoria,
+      tipo: mov.tipo
+    });
+  };
+
+  // Guardar edición de movimiento
+  const guardarEdicionMovimiento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!movimientoEditando?.id) return;
+
+    const importeNum = parseFloat(formularioEdicion.importe.replace(',', '.'));
+    if (isNaN(importeNum) || importeNum <= 0) {
+      alert('Por favor, introduce un importe válido mayor que 0.');
+      return;
+    }
+
+    if (!formularioEdicion.concepto.trim()) {
+      alert('Por favor, indica un concepto o descripción.');
+      return;
+    }
+
+    if (!formularioEdicion.fecha) {
+      alert('Por favor, selecciona una fecha.');
+      return;
+    }
+
+    const nuevoMesAno = formularioEdicion.fecha.substring(0, 7);
+
+    setGuardandoEdicion(true);
+    try {
+      await updateDoc(doc(db, 'finanzas_familiares', movimientoEditando.id), {
+        importe: Math.round(importeNum * 100) / 100,
+        concepto: formularioEdicion.concepto.trim(),
+        fecha: formularioEdicion.fecha,
+        mesAno: nuevoMesAno,
+        categoria: formularioEdicion.categoria,
+        tipo: formularioEdicion.tipo,
+        actualizadoEn: new Date().toISOString(),
+        actualizadoPor: usuario?.email || 'usuario'
+      });
+
+      setMovimientoEditando(null);
+
+      // Si cambió de mes, navegar opcionalmente a ese mes
+      if (nuevoMesAno !== mesAnoClave) {
+        const [y, m] = nuevoMesAno.split('-').map(Number);
+        setFechaMesActivo(new Date(y, m - 1, 1));
+      }
+    } catch (error) {
+      console.error('Error al actualizar movimiento:', error);
+      alert('Hubo un error al guardar los cambios del movimiento.');
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  };
+
+  // Eliminar movimiento desde el modal de edición
+  const eliminarMovimientoDesdeEdicion = async () => {
+    if (!movimientoEditando?.id) return;
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este movimiento permanentemente?')) {
+      return;
+    }
+
+    setGuardandoEdicion(true);
+    try {
+      await deleteDoc(doc(db, 'finanzas_familiares', movimientoEditando.id));
+      setMovimientoEditando(null);
+    } catch (error) {
+      console.error('Error al eliminar movimiento:', error);
+      alert('Hubo un error al eliminar el movimiento de la nube.');
+    } finally {
+      setGuardandoEdicion(false);
     }
   };
 
@@ -900,6 +994,8 @@ export default function FinanzasFamiliares({ usuario }: FinanzasFamiliaresProps)
             return (
               <div
                 key={mov.id}
+                onClick={() => abrirModalEditar(mov)}
+                title="Toca para editar o eliminar este movimiento"
                 style={{
                   backgroundColor: '#ffffff',
                   borderRadius: '12px',
@@ -910,8 +1006,12 @@ export default function FinanzasFamiliares({ usuario }: FinanzasFamiliaresProps)
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  gap: '10px'
+                  gap: '10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
                 }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#ffffff')}
               >
                 {/* ICONO Y DETALLE */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, overflow: 'hidden' }}>
@@ -960,7 +1060,7 @@ export default function FinanzasFamiliares({ usuario }: FinanzasFamiliaresProps)
                   </div>
                 </div>
 
-                {/* IMPORTE Y BOTÓN BORRAR */}
+                {/* IMPORTE Y BOTONES */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                   <span style={{
                     fontSize: '14px',
@@ -971,7 +1071,45 @@ export default function FinanzasFamiliares({ usuario }: FinanzasFamiliaresProps)
                   </span>
 
                   <button
-                    onClick={() => eliminarMovimiento(mov.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      abrirModalEditar(mov);
+                    }}
+                    title="Editar movimiento"
+                    aria-label="Editar movimiento"
+                    style={{
+                      background: '#f1f5f9',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                      color: '#475569',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: '4px 6px',
+                      lineHeight: 1,
+                      transition: 'all 0.15s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.backgroundColor = '#e0f2fe';
+                      e.currentTarget.style.borderColor = '#bae6fd';
+                      e.currentTarget.style.color = '#0284c7';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f1f5f9';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                      e.currentTarget.style.color = '#475569';
+                    }}
+                  >
+                    ✏️
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      eliminarMovimiento(mov.id);
+                    }}
                     title="Eliminar movimiento"
                     aria-label="Borrar movimiento"
                     style={{
@@ -1235,6 +1373,286 @@ export default function FinanzasFamiliares({ usuario }: FinanzasFamiliaresProps)
                   }}
                 >
                   {guardando ? 'Guardando...' : 'Guardar Movimiento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR MOVIMIENTO EXISTENTE */}
+      {movimientoEditando && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            color: '#111827',
+            padding: '24px',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '390px',
+            boxShadow: '0 16px 36px rgba(0, 0, 0, 0.25)',
+            border: '1px solid #e2e8f0',
+            maxHeight: '92vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#0f172a', fontSize: '18px', fontWeight: 800 }}>
+                  ✏️ Editar Movimiento
+                </h3>
+                <span style={{ fontSize: '11px', color: '#0284c7', fontWeight: 700 }}>
+                  Cuenta Común
+                </span>
+              </div>
+              <button
+                onClick={() => setMovimientoEditando(null)}
+                style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#94a3b8' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={guardarEdicionMovimiento}>
+              {/* SELECTOR DE TIPO (GASTO O INGRESO) */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => setFormularioEdicion(prev => ({
+                    ...prev,
+                    tipo: 'gasto',
+                    categoria: prev.categoria === 'Trabajo' ? 'Alimentación' : prev.categoria
+                  }))}
+                  style={{
+                    flex: 1,
+                    padding: '9px',
+                    borderRadius: '8px',
+                    border: formularioEdicion.tipo === 'gasto' ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                    backgroundColor: formularioEdicion.tipo === 'gasto' ? '#fef2f2' : '#ffffff',
+                    color: formularioEdicion.tipo === 'gasto' ? '#dc2626' : '#475569',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔴 Gasto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormularioEdicion(prev => ({
+                    ...prev,
+                    tipo: 'ingreso',
+                    categoria: prev.categoria === 'Alimentación' ? 'Trabajo' : prev.categoria
+                  }))}
+                  style={{
+                    flex: 1,
+                    padding: '9px',
+                    borderRadius: '8px',
+                    border: formularioEdicion.tipo === 'ingreso' ? '2px solid #10b981' : '1px solid #cbd5e1',
+                    backgroundColor: formularioEdicion.tipo === 'ingreso' ? '#ecfdf5' : '#ffffff',
+                    color: formularioEdicion.tipo === 'ingreso' ? '#047857' : '#475569',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🟢 Ingreso
+                </button>
+              </div>
+
+              {/* IMPORTE (€) */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 700, fontSize: '12px', color: '#334155' }}>
+                  Importe (€):
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="0.00"
+                    required
+                    value={formularioEdicion.importe}
+                    onChange={(e) => setFormularioEdicion({ ...formularioEdicion, importe: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 38px 10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontSize: '16px',
+                      fontWeight: 700,
+                      color: '#0f172a',
+                      outline: 'none'
+                    }}
+                  />
+                  <span style={{ position: 'absolute', right: '14px', fontWeight: 700, color: '#64748b', fontSize: '15px' }}>
+                    €
+                  </span>
+                </div>
+              </div>
+
+              {/* CONCEPTO */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 700, fontSize: '12px', color: '#334155' }}>
+                  Concepto:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formularioEdicion.concepto}
+                  onChange={(e) => setFormularioEdicion({ ...formularioEdicion, concepto: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* FECHA */}
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 700, fontSize: '12px', color: '#334155' }}>
+                  Fecha:
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formularioEdicion.fecha}
+                  onChange={(e) => setFormularioEdicion({ ...formularioEdicion, fecha: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* CATEGORÍA */}
+              <div style={{ marginBottom: '18px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 700, fontSize: '12px', color: '#334155' }}>
+                  Categoría:
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                  {CATEGORIAS.map((cat) => {
+                    const sel = formularioEdicion.categoria === cat.nombre;
+                    return (
+                      <button
+                        key={cat.nombre}
+                        type="button"
+                        onClick={() => setFormularioEdicion({ ...formularioEdicion, categoria: cat.nombre })}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '7px 8px',
+                          borderRadius: '8px',
+                          border: sel ? `2px solid ${cat.color}` : '1px solid #e2e8f0',
+                          backgroundColor: sel ? cat.bg : '#ffffff',
+                          color: sel ? cat.color : '#475569',
+                          fontWeight: sel ? 800 : 600,
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          textAlign: 'left'
+                        }}
+                      >
+                        <span>{cat.icono}</span>
+                        <span>{cat.nombre}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* BOTONES ACCIÓN: CANCELAR, GUARDAR Y ELIMINAR */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                marginTop: '18px',
+                paddingTop: '14px',
+                borderTop: '1px solid #f1f5f9'
+              }}>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => setMovimientoEditando(null)}
+                    style={{
+                      padding: '9px 16px',
+                      backgroundColor: '#f1f5f9',
+                      color: '#475569',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '13px'
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={guardandoEdicion}
+                    style={{
+                      padding: '9px 18px',
+                      backgroundColor: '#059669',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: guardandoEdicion ? 'not-allowed' : 'pointer',
+                      fontWeight: 800,
+                      fontSize: '13px',
+                      boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)',
+                      opacity: guardandoEdicion ? 0.7 : 1
+                    }}
+                  >
+                    {guardandoEdicion ? 'Guardando...' : 'Guardar Cambios'}
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={eliminarMovimientoDesdeEdicion}
+                  disabled={guardandoEdicion}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    backgroundColor: '#fee2e2',
+                    color: '#b91c1c',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    cursor: guardandoEdicion ? 'not-allowed' : 'pointer',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    marginTop: '2px'
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#fecaca')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#fee2e2')}
+                >
+                  <span>🗑️ Eliminar Movimiento</span>
                 </button>
               </div>
             </form>

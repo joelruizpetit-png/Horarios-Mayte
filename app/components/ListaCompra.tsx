@@ -303,7 +303,7 @@ export default function ListaCompra({ usuario, onIrAFinanzas }: ListaCompraProps
         flexDirection: 'column',
         gap: '12px'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '20px' }}>🛒</span>
@@ -319,9 +319,11 @@ export default function ListaCompra({ usuario, onIrAFinanzas }: ListaCompraProps
           {/* BOTÓN FINALIZAR COMPRA / REGISTRAR GASTO */}
           <button
             onClick={abrirModalFinalizarCompra}
+            className="w-full sm:w-auto"
             style={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '6px',
               padding: '10px 14px',
               backgroundColor: articulosComprados.length > 0 ? '#059669' : '#0284c7',
@@ -332,8 +334,7 @@ export default function ListaCompra({ usuario, onIrAFinanzas }: ListaCompraProps
               fontWeight: 800,
               fontSize: '13px',
               boxShadow: articulosComprados.length > 0 ? '0 3px 10px rgba(5, 150, 105, 0.35)' : '0 2px 6px rgba(2, 132, 199, 0.25)',
-              transition: 'all 0.15s ease',
-              flexShrink: 0
+              transition: 'all 0.15s ease'
             }}
             onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
             onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
@@ -354,65 +355,84 @@ export default function ListaCompra({ usuario, onIrAFinanzas }: ListaCompraProps
           </button>
         </div>
 
-        {/* FORMULARIO RÁPIDO PARA AÑADIR ARTÍCULO */}
-        <form onSubmit={agregarArticulo} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type="text"
-              placeholder="Añadir artículo (ej: Leche, Fruta, Pan...)"
-              value={nuevoNombre}
-              onChange={(e) => setNuevoNombre(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '10px 12px',
-                borderRadius: '10px',
-                border: '1px solid #cbd5e1',
-                fontSize: '14px',
-                color: '#0f172a',
-                outline: 'none',
-                backgroundColor: '#f8fafc'
-              }}
-            />
-            <input
-              type="text"
-              placeholder="Cant. (ej: 2)"
-              value={nuevaCantidad}
-              onChange={(e) => setNuevaCantidad(e.target.value)}
-              style={{
-                width: '78px',
-                padding: '10px 8px',
-                borderRadius: '10px',
-                border: '1px solid #cbd5e1',
-                fontSize: '13px',
-                color: '#0f172a',
-                outline: 'none',
-                textAlign: 'center',
-                backgroundColor: '#f8fafc'
-              }}
-            />
-            <button
-              type="submit"
-              disabled={guardandoNuevo || !nuevoNombre.trim()}
-              style={{
-                padding: '10px 14px',
-                backgroundColor: '#0047b3',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '10px',
-                fontWeight: 800,
-                fontSize: '14px',
-                cursor: !nuevoNombre.trim() ? 'not-allowed' : 'pointer',
-                opacity: !nuevoNombre.trim() ? 0.6 : 1,
-                transition: 'background-color 0.15s ease',
-                flexShrink: 0
-              }}
-            >
-              + Añadir
-            </button>
+        {/* FORMULARIO RÁPIDO PARA AÑADIR ARTÍCULO (100% RESPONSIVE EN MÓVIL Y ESCRITORIO) */}
+        <form onSubmit={agregarArticulo} className="flex flex-col gap-2 mt-1 w-full" style={{ width: '100%', boxSizing: 'border-box' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 w-full" style={{ width: '100%' }}>
+            {/* CAMPO NOMBRE DEL ARTÍCULO */}
+            <div className="sm:col-span-7 w-full">
+              <input
+                type="text"
+                placeholder="Añadir artículo (ej: Leche, Fruta, Pan...)"
+                value={nuevoNombre}
+                onChange={(e) => setNuevoNombre(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '14px',
+                  color: '#0f172a',
+                  outline: 'none',
+                  backgroundColor: '#f8fafc',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* CONTENEDOR FLEX/GRID DE CANTIDAD Y BOTÓN */}
+            <div className="grid grid-cols-12 gap-2 sm:contents w-full">
+              <div className="col-span-4 sm:col-span-2 w-full">
+                <input
+                  type="text"
+                  placeholder="Cant. (ej: 2)"
+                  value={nuevaCantidad}
+                  onChange={(e) => setNuevaCantidad(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 8px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    color: '#0f172a',
+                    outline: 'none',
+                    textAlign: 'center',
+                    backgroundColor: '#f8fafc',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div className="col-span-8 sm:col-span-3 w-full">
+                <button
+                  type="submit"
+                  disabled={guardandoNuevo || !nuevoNombre.trim()}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    backgroundColor: '#0047b3',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontWeight: 800,
+                    fontSize: '14px',
+                    cursor: !nuevoNombre.trim() ? 'not-allowed' : 'pointer',
+                    opacity: !nuevoNombre.trim() ? 0.6 : 1,
+                    transition: 'background-color 0.15s ease',
+                    boxSizing: 'border-box',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  + Añadir
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* SELECTOR RÁPIDO DE CATEGORÍA */}
-          <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+          <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', maxWidth: '100%', scrollbarWidth: 'none' }}>
             {CATEGORIAS_COMPRA.map(cat => {
               const activa = nuevaCategoria === cat.nombre;
               return (
