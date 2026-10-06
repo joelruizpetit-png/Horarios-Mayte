@@ -108,25 +108,118 @@ export async function asegurarTokenGoogleCalendar(promptSiFalta = false): Promis
   return null;
 }
 
+export const TIMEZONE_MADRID = 'Europe/Madrid';
+
 /**
- * Construye el objeto payload para la API v3 de Google Calendar con alarmas nativas:
- * - Notificación móvil 30 minutos antes
- * - Notificación móvil 1 día (1440 minutos) antes
+ * Obtiene el offset de la zona horaria de Madrid (ej. "+02:00" en horario de verano CEST o "+01:00" en invierno CET)
+ * para un objeto Date dado.
  */
-export function prepararPayloadGoogleCalendar(fechaClave: string, evento: EventoAgendaGC) {
-  let d = new Date(fechaClave);
-  if (isNaN(d.getTime())) {
-    d = new Date();
+export function obtenerOffsetMadrid(fecha: Date): string {
+  try {
+    const formato = new Intl.DateTimeFormat('en-US', {
+      timeZone: TIMEZONE_MADRID,
+      timeZoneName: 'longOffset'
+    });
+    const partes = formato.formatToParts(fecha);
+    const part = partes.find((p) => p.type === 'timeZoneName');
+    if (part && part.value) {
+      const match = part.value.match(/GMT([+-]\d{2}:\d{2})/);
+      if (match) return match[1];
+    }
+  } catch {
+    // Si longOffset no está soportado en este entorno
   }
 
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dia = String(d.getDate()).padStart(2, '0');
-  const fechaISO = `${y}-${m}-${dia}`;
+  try {
+    const fechaUTC = new Date(fecha.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const fechaMadrid = new Date(fecha.toLocaleString('en-US', { timeZone: TIMEZONE_MADRID }));
+    const diffMin = Math.round((fechaMadrid.getTime() - fechaUTC.getTime()) / 60000);
+    const sign = diffMin >= 0 ? '+' : '-';
+    const absMin = Math.abs(diffMin);
+    const h = String(Math.floor(absMin / 60)).padStart(2, '0');
+    const m = String(absMin % 60).padStart(2, '0');
+    return `${sign}${h}:${m}`;
+  } catch {
+    return '+02:00';
+  }
+}
 
-  const timeZone = typeof Intl !== 'undefined'
-    ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Madrid')
-    : 'Europe/Madrid';
+/**
+ * Formatea una fecha a hora "HH:mm" garantizando la zona horaria Europe/Madrid.
+ */
+export function formatearHoraMadrid(fecha: Date): string {
+  return fecha.toLocaleTimeString('es-ES', {
+    timeZone: TIMEZONE_MADRID,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+/**
+ * Convierte un objeto Date a la clave de fecha en formato de la app (ej. "Tue Oct 06 2026")
+ * según el día calendario que corresponde en Europe/Madrid.
+ */
+export function obtenerFechaClaveMadrid(fecha: Date): string {
+  const formateador = new Intl.DateTimeFormat('en-US', {
+    timeZone: TIMEZONE_MADRID,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric'
+  });
+  const partes = formateador.formatToParts(fecha);
+  const y = Number(partes.find((p) => p.type === 'year')?.value);
+  const m = Number(partes.find((p) => p.type === 'month')?.value);
+  const d = Number(partes.find((p) => p.type === 'day')?.value);
+  return new Date(y, m - 1, d).toDateString();
+}
+
+/**
+ * Extrae año, mes, día y la cadena YYYY-MM-DD para una fecha dada como string.
+ */
+export function extraerPartesFecha(fechaClave: string): { y: number; m: number; dia: number; fechaISO: string } {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaClave)) {
+    const [cy, cm, cd] = fechaClave.split('-').map(Number);
+    return {
+      y: cy,
+      m: cm,
+      dia: cd,
+      fechaISO: `${String(cy).padStart(4, '0')}-${String(cm).padStart(2, '0')}-${String(cd).padStart(2, '0')}`
+    };
+  }
+
+  const d = new Date(fechaClave);
+  if (!isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const dia = d.getDate();
+    return {
+      y,
+      m,
+      dia,
+      fechaISO: `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+    };
+  }
+
+  const hoy = new Date();
+  const y = hoy.getFullYear();
+  const m = hoy.getMonth() + 1;
+  const dia = hoy.getDate();
+  return {
+    y,
+    m,
+    dia,
+    fechaISO: `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+  };
+}
+
+/**
+ * Construye el objeto payload para la API v3 de Google Calendar con zona horaria Europe/Madrid
+ * y alarmas nativas (30 min y 1 día antes).
+ * Especifica explícitamente tanto el offset ISO como el timeZone 'Europe/Madrid' en start y end.
+ */
+export function prepararPayloadGoogleCalendar(fechaClave: string, evento: EventoAgendaGC) {
+  const { y, m, dia, fechaISO } = extraerPartesFecha(fechaClave);
 
   const horaLimpia = (evento.hora || '').trim();
   const esHoraValida = /^\d{1,2}:\d{2}$/.test(horaLimpia) && horaLimpia !== '--:--';
@@ -136,42 +229,59 @@ export function prepararPayloadGoogleCalendar(fechaClave: string, evento: Evento
 
   if (esHoraValida) {
     const [hStr, mStr] = horaLimpia.split(':');
-    const inicio = new Date(d.getFullYear(), d.getMonth(), d.getDate(), parseInt(hStr, 10), parseInt(mStr, 10), 0);
+    const h = parseInt(hStr, 10);
+    const min = parseInt(mStr, 10);
+    const dInicioRef = new Date(y, m - 1, dia, h, min, 0);
+    const offsetInicio = obtenerOffsetMadrid(dInicioRef);
+    const startDateTime = `${fechaISO}T${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:00${offsetInicio}`;
 
-    let fin: Date;
+    let dFinRef: Date;
     const horaFinLimpia = (evento.horaFin || '').trim();
-    if (/^\d{1,2}:\d{2}$/.test(horaFinLimpia)) {
+    if (/^\d{1,2}:\d{2}$/.test(horaFinLimpia) && horaFinLimpia !== '--:--') {
       const [hfStr, mfStr] = horaFinLimpia.split(':');
-      fin = new Date(d.getFullYear(), d.getMonth(), d.getDate(), parseInt(hfStr, 10), parseInt(mfStr, 10), 0);
-      if (fin <= inicio) {
-        fin = new Date(inicio.getTime() + 60 * 60 * 1000);
+      const hf = parseInt(hfStr, 10);
+      const minf = parseInt(mfStr, 10);
+      dFinRef = new Date(y, m - 1, dia, hf, minf, 0);
+      if (dFinRef <= dInicioRef) {
+        dFinRef = new Date(dInicioRef.getTime() + 60 * 60 * 1000);
       }
     } else {
       // Duración por defecto de 1 hora
-      fin = new Date(inicio.getTime() + 60 * 60 * 1000);
+      dFinRef = new Date(dInicioRef.getTime() + 60 * 60 * 1000);
     }
 
+    const yf = dFinRef.getFullYear();
+    const mf = dFinRef.getMonth() + 1;
+    const diaf = dFinRef.getDate();
+    const hfNum = dFinRef.getHours();
+    const minfNum = dFinRef.getMinutes();
+    const offsetFin = obtenerOffsetMadrid(dFinRef);
+    const fechaFinISO = `${String(yf).padStart(4, '0')}-${String(mf).padStart(2, '0')}-${String(diaf).padStart(2, '0')}`;
+    const endDateTime = `${fechaFinISO}T${String(hfNum).padStart(2, '0')}:${String(minfNum).padStart(2, '0')}:00${offsetFin}`;
+
     start = {
-      dateTime: inicio.toISOString(),
-      timeZone
+      dateTime: startDateTime,
+      timeZone: TIMEZONE_MADRID
     };
     end = {
-      dateTime: fin.toISOString(),
-      timeZone
+      dateTime: endDateTime,
+      timeZone: TIMEZONE_MADRID
     };
   } else {
     // Evento de día completo: en Google Calendar la fecha fin es exclusiva (día siguiente)
-    const dSiguiente = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    const dSiguiente = new Date(y, m - 1, dia + 1);
     const ySig = dSiguiente.getFullYear();
     const mSig = String(dSiguiente.getMonth() + 1).padStart(2, '0');
     const diaSig = String(dSiguiente.getDate()).padStart(2, '0');
     const fechaSiguienteISO = `${ySig}-${mSig}-${diaSig}`;
 
     start = {
-      date: fechaISO
+      date: fechaISO,
+      timeZone: TIMEZONE_MADRID
     };
     end = {
-      date: fechaSiguienteISO
+      date: fechaSiguienteISO,
+      timeZone: TIMEZONE_MADRID
     };
   }
 
@@ -441,7 +551,7 @@ export async function obtenerEventosGoogleCalendar({
   const timeMax = fechaFin.toISOString();
 
   try {
-    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=250`;
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&timeZone=Europe%2FMadrid&singleEvents=true&orderBy=startTime&maxResults=250`;
 
     const res = await fetch(url, {
       method: 'GET',
@@ -483,11 +593,13 @@ export async function obtenerEventosGoogleCalendar({
 
       if (item.start?.dateTime) {
         const dInicio = new Date(item.start.dateTime);
-        fechaClave = dInicio.toDateString();
-        hora = dInicio.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+        fechaClave = obtenerFechaClaveMadrid(dInicio);
+        hora = formatearHoraMadrid(dInicio);
         if (item.end?.dateTime) {
           const dFin = new Date(item.end.dateTime);
-          horaFin = dFin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+          if (dFin.getTime() > dInicio.getTime()) {
+            horaFin = formatearHoraMadrid(dFin);
+          }
         }
       } else if (item.start?.date) {
         // Evento de todo el día ("YYYY-MM-DD"). En Google Calendar la fecha de fin es exclusiva

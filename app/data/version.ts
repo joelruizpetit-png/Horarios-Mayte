@@ -1,6 +1,6 @@
 // app/data/version.ts
 
-export const APP_VERSION = "1.3.0";
+export const APP_VERSION = "1.3.1";
 
 export interface ItemNovedadVersion {
   icono: string;
@@ -24,6 +24,14 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
   fecha: "Octubre 2026",
   items: [
     {
+      icono: "⏰",
+      titulo: "Sincronización horaria exacta con Google Calendar",
+      descripcion: "Ajuste y fijación de zona horaria oficial (Europe/Madrid) al crear, editar y consultar eventos con la API de Google Calendar. Se resuelven desajustes de horas en móviles y tarjetas de la Agenda.",
+      badge: "Zona Horaria",
+      badgeColor: "#0284c7",
+      badgeBg: "#e0f2fe"
+    },
+    {
       icono: "🍱",
       titulo: "¡Menú Escolar de Octubre de Alma cargado!",
       descripcion: "Carga completa plato por plato de todos los días lectivos de octubre de Alma (Institut Escola Castellterçol, Moianès): Primer plato, Segundo plato, Postre, valores nutricionales y el Menú Especial de la Castanyada del 30 de octubre.",
@@ -33,8 +41,8 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
     },
     {
       icono: "🚀",
-      titulo: "¡Bienvenido a AJA v1.3.0!",
-      descripcion: "Tu sistema operativo familiar (Ana, Joel y Alma) se actualiza con sincronización directa en Firestore de las comidas escolares de Alma y mejoras generales.",
+      titulo: "¡Bienvenido a AJA v1.3.1!",
+      descripcion: "Tu sistema operativo familiar (Ana, Joel y Alma) se actualiza con corrección de sincronización horaria en Google Calendar, menú escolar de Alma y mejoras generales.",
       badge: "Nueva Versión",
       badgeColor: "#0047b3",
       badgeBg: "#eff6ff"
