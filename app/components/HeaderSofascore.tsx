@@ -1,5 +1,6 @@
 "use client";
 import React from 'react';
+import { formatearNombreFamiliar } from '../utils/actividad';
 
 export interface TabItem {
   id: string;
@@ -38,7 +39,7 @@ export default function HeaderSofascore({
   seccionActiva = 'planificador',
   onCambiarSeccion
 }: HeaderSofascoreProps) {
-  const nombreUsuario = usuario?.displayName || (usuario?.email ? usuario.email.split('@')[0] : 'Usuario');
+  const nombreUsuario = formatearNombreFamiliar(usuario?.displayName, usuario?.email);
 
   return (
     <header style={{

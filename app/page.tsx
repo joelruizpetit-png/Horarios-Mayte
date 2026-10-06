@@ -9,7 +9,8 @@ import MenuLateral from './components/MenuLateral';
 import FinanzasFamiliares from './components/FinanzasFamiliares';
 import ListaCompra from './components/ListaCompra';
 import ModalNovedades from './components/ModalNovedades';
-import { auth } from './firebase';
+import ModalVersion from './components/ModalVersion';
+import { auth, googleCalendarProvider } from './firebase';
 import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
@@ -18,6 +19,7 @@ import {
   signInWithPopup,
   User
 } from 'firebase/auth';
+import { guardarTokenGoogleCalendar, limpiarTokenGoogleCalendar } from './utils/googleCalendar';
 
 const CORREOS_AUTORIZADOS = [
   "joelruizpetit@gmail.com",
@@ -29,6 +31,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [seccionPrincipal, setSeccionPrincipal] = useState<'planificador' | 'finanzas' | 'lista-compra'>('planificador');
   const [menuLateralAbierto, setMenuLateralAbierto] = useState<boolean>(false);
+  const [modalVersionAbierto, setModalVersionAbierto] = useState<boolean>(false);
   const [tabActiva, setTabActiva] = useState<string>('general');
   const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(new Date());
 
@@ -68,15 +71,21 @@ export default function Home() {
 
   const iniciarSesionConGoogle = async () => {
     setError("");
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
     try {
-      const result = await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, googleCalendarProvider);
       const userEmail = result.user?.email?.toLowerCase();
       if (!userEmail || !CORREOS_AUTORIZADOS.includes(userEmail)) {
         await signOut(auth);
         setUsuario(null);
         setError(`Acceso denegado: El correo "${result.user?.email || ''}" no está autorizado.`);
+        return;
+      }
+
+      // Guardar el token de Google Calendar para sincronización automática y alarmas
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken;
+      if (token) {
+        guardarTokenGoogleCalendar(token);
       }
     } catch (err: unknown) {
       console.error(err);
@@ -93,6 +102,7 @@ export default function Home() {
   };
 
   const cerrarSesion = () => {
+    limpiarTokenGoogleCalendar();
     signOut(auth);
   };
 
@@ -122,6 +132,13 @@ export default function Home() {
           }}
           usuario={usuario}
           onCerrarSesion={cerrarSesion}
+          onAbrirNovedadesVersion={() => setModalVersionAbierto(true)}
+        />
+
+        {/* MODAL DE NOVEDADES DE LA VERSIÓN (RELEASE NOTES / CHANGELOG) */}
+        <ModalVersion
+          abiertoManual={modalVersionAbierto}
+          onCerrarManual={() => setModalVersionAbierto(false)}
         />
 
         {/* MODAL DE NOVEDADES Y CAMBIOS RECIENTES */}
@@ -310,6 +327,12 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* MODAL DE NOVEDADES DE LA VERSIÓN (DISPONIBLE TAMBIÉN EN ACCESO) */}
+      <ModalVersion
+        abiertoManual={modalVersionAbierto}
+        onCerrarManual={() => setModalVersionAbierto(false)}
+      />
     </div>
   );
 } 

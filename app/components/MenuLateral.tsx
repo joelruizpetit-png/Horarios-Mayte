@@ -1,5 +1,7 @@
 "use client";
 import React, { useEffect } from 'react';
+import { formatearNombreFamiliar } from '../utils/actividad';
+import { APP_VERSION } from '../data/version';
 
 interface MenuLateralProps {
   abierto: boolean;
@@ -11,6 +13,7 @@ interface MenuLateralProps {
     email?: string | null;
   } | null;
   onCerrarSesion: () => void;
+  onAbrirNovedadesVersion?: () => void;
 }
 
 export default function MenuLateral({
@@ -19,7 +22,8 @@ export default function MenuLateral({
   seccionActiva,
   onCambiarSeccion,
   usuario,
-  onCerrarSesion
+  onCerrarSesion,
+  onAbrirNovedadesVersion
 }: MenuLateralProps) {
   // Prevenir scroll de fondo al estar el menú abierto
   useEffect(() => {
@@ -34,9 +38,9 @@ export default function MenuLateral({
   }, [abierto]);
 
   const email = usuario?.email?.toLowerCase() || '';
-  const esJoel = email.includes('joel');
-  const nombreMostrado = usuario?.displayName || (esJoel ? 'Joel Ruiz' : (email.includes('aijg') ? 'Arantxa' : (email ? email.split('@')[0] : 'Usuario')));
-  const inicial = esJoel ? 'J' : (email.includes('aijg') ? 'A' : (nombreMostrado.charAt(0).toUpperCase() || 'U'));
+  const nombreMostrado = formatearNombreFamiliar(usuario?.displayName, email);
+  const esJoel = nombreMostrado === 'Joel';
+  const inicial = esJoel ? 'J' : 'A';
 
   return (
     <>
@@ -431,9 +435,44 @@ export default function MenuLateral({
             <span>Cerrar Sesión</span>
           </button>
 
-          <div style={{ textAlign: 'center', fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
-            Planificador Familiar • v1.2
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (onAbrirNovedadesVersion) {
+                onAbrirNovedadesVersion();
+                onCerrar();
+              }
+            }}
+            title="Ver novedades de la versión"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              textAlign: 'center',
+              fontSize: '11px',
+              color: '#64748b',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              padding: '6px',
+              borderRadius: '8px',
+              transition: 'all 0.15s ease',
+              width: '100%'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.color = '#0047b3';
+              e.currentTarget.style.backgroundColor = '#f1f5f9';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.color = '#64748b';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <span>Planificador Familiar • v{APP_VERSION}</span>
+            <span style={{ fontSize: '13px' }}>✨</span>
+          </button>
         </div>
       </aside>
     </>

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
-import { RegistroActividad } from '../utils/actividad';
+import { RegistroActividad, formatearNombreFamiliar } from '../utils/actividad';
 
 interface ModalNovedadesProps {
   usuario: {
@@ -17,6 +17,7 @@ export default function ModalNovedades({ usuario }: ModalNovedadesProps) {
   const [verificando, setVerificando] = useState<boolean>(false);
 
   const miEmail = (usuario?.email || '').toLowerCase().trim();
+  const miNombreNormalizado = formatearNombreFamiliar(usuario?.displayName, miEmail);
 
   const comprobarNovedades = useCallback(async () => {
     if (!miEmail) return;
@@ -42,10 +43,11 @@ export default function ModalNovedades({ usuario }: ModalNovedadesProps) {
       // Filtrar registros posteriores a la última conexión y creados por el otro usuario
       const cambiosNuevos = todas.filter((item) => {
         const esPosterior = item.timestamp > referenciaTiempo;
-        const esOtroUsuario = item.usuarioEmail
-          ? item.usuarioEmail.toLowerCase() !== miEmail
-          : true;
-        return esPosterior && esOtroUsuario;
+        const nombreAutorItem = formatearNombreFamiliar(item.usuario, item.usuarioEmail);
+        const esMismoUsuario = item.usuarioEmail
+          ? item.usuarioEmail.toLowerCase() === miEmail
+          : nombreAutorItem === miNombreNormalizado;
+        return esPosterior && !esMismoUsuario;
       });
 
       if (cambiosNuevos.length > 0) {
@@ -138,8 +140,8 @@ export default function ModalNovedades({ usuario }: ModalNovedadesProps) {
     }
   };
 
-  // Nombre de quien hizo los cambios
-  const autorNovedades = novedades[0]?.usuario || 'Tu familia';
+  // Nombre de quien hizo los cambios (fuerza siempre "Ana" o "Joel")
+  const autorNovedades = formatearNombreFamiliar(novedades[0]?.usuario, novedades[0]?.usuarioEmail) || 'Tu familia';
 
   return (
     <div
@@ -293,7 +295,7 @@ export default function ModalNovedades({ usuario }: ModalNovedadesProps) {
                       padding: '1px 6px',
                       borderRadius: '4px'
                     }}>
-                      👤 {item.usuario}
+                      👤 {formatearNombreFamiliar(item.usuario, item.usuarioEmail)}
                     </span>
                   </div>
                 )}

@@ -2,6 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase'; 
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { registrarActividad, formatearNombreFamiliar } from '../utils/actividad';
+import {
+  sincronizarEventoGoogleCalendar,
+  eliminarEventoGoogleCalendar,
+  estaGoogleCalendarConectado,
+  conectarGoogleCalendar
+} from '../utils/googleCalendar';
 
 interface Evento {
   titulo: string;
@@ -10,6 +17,7 @@ interface Evento {
   tipo?: 'normal' | 'trabajo' | string;
   categoria?: string;
   creador?: string;
+  googleCalendarEventId?: string;
 }
 
 const DIAS_SEMANA = [
@@ -67,6 +75,7 @@ export default function CalendarioSemanal({
     horaFin: string;
     tipo: string;
     creador: string;
+    googleCalendarEventId?: string;
   }>({
     index: -1,
     fechaClave: '',
@@ -74,8 +83,24 @@ export default function CalendarioSemanal({
     hora: '',
     horaFin: '',
     tipo: 'normal',
-    creador: 'J'
+    creador: 'J',
+    googleCalendarEventId: ''
   });
+
+  // Estado de conexión con Google Calendar
+  const [gcalConectado, setGcalConectado] = useState<boolean>(false);
+
+  useEffect(() => {
+    setGcalConectado(estaGoogleCalendarConectado());
+  }, []);
+
+  const manejarConectarGoogle = async () => {
+    const token = await conectarGoogleCalendar();
+    if (token) {
+      setGcalConectado(true);
+      alert("¡Google Calendar conectado con éxito! Tus eventos se sincronizarán con alarmas nativas (30 min y 1 día antes) en tu móvil.");
+    }
+  };
 
   const DIAS_SEMANA_OPCIONES = [
     { num: 1, label: 'L', nombre: 'Lunes' },
@@ -102,12 +127,11 @@ export default function CalendarioSemanal({
     }
   };
 
+  // Obtener la inicial del creador ("J" para Joel, "A" para Ana)
   const obtenerInicialCreador = () => {
     const email = usuario?.email || auth?.currentUser?.email || '';
-    const emailLimpio = email.toLowerCase().trim();
-    if (emailLimpio === 'joelruizpetit@gmail.com') return 'J';
-    if (emailLimpio === 'aijg1985@gmail.com') return 'A';
-    return emailLimpio ? emailLimpio.charAt(0).toUpperCase() : 'J';
+    const nombre = formatearNombreFamiliar(undefined, email);
+    return nombre === 'Ana' ? 'A' : 'J';
   };
 
   // Identificar si un evento proviene de la Pestaña Deportes
@@ -243,6 +267,19 @@ export default function CalendarioSemanal({
             creador: obtenerInicialCreador()
           };
 
+          // Sincronizar con Google Calendar
+          try {
+            const resGcal = await sincronizarEventoGoogleCalendar({
+              fechaClave,
+              evento: eventoAGuardar
+            });
+            if (resGcal?.googleCalendarEventId) {
+              eventoAGuardar.googleCalendarEventId = resGcal.googleCalendarEventId;
+            }
+          } catch (errGcal) {
+            console.warn("No se pudo sincronizar recurrente con Google Calendar:", errGcal);
+          }
+
           nuevosEventos[fechaClave] = [...notasDelDia, eventoAGuardar];
           eventosCreados++;
         }
@@ -261,6 +298,11 @@ export default function CalendarioSemanal({
 
       try {
         await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+        registrarActividad({
+          seccion: 'agenda',
+          descripcion: `Nuevo evento recurrente: "${nuevoEvento.titulo.trim()}" (${eventosCreados} días)`,
+          usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
+        });
       } catch (error) {
         console.error("Error al guardar eventos recurrentes:", error);
         alert("Error al guardar en la nube");
@@ -280,6 +322,20 @@ export default function CalendarioSemanal({
       creador: obtenerInicialCreador()
     };
 
+    // Sincronizar automáticamente con Google Calendar
+    try {
+      const resGcal = await sincronizarEventoGoogleCalendar({
+        fechaClave,
+        evento: eventoAGuardar,
+        solicitarPermisoSiFalta: false
+      });
+      if (resGcal?.googleCalendarEventId) {
+        eventoAGuardar.googleCalendarEventId = resGcal.googleCalendarEventId;
+      }
+    } catch (errGcal) {
+      console.warn("No se pudo sincronizar evento con Google Calendar:", errGcal);
+    }
+
     const nuevosEventos = {
       ...eventos,
       [fechaClave]: [...notasDelDia, eventoAGuardar]
@@ -291,6 +347,12 @@ export default function CalendarioSemanal({
 
     try {
       await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+      const fechaFormato = fechaModal.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+      registrarActividad({
+        seccion: 'agenda',
+        descripcion: `Nuevo evento: "${nuevoEvento.titulo.trim()}" (${nuevoEvento.hora || 'Todo el día'}) para el ${fechaFormato}`,
+        usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
+      });
     } catch (error) {
       console.error("Error al guardar:", error);
       alert("Error al guardar en la nube");
@@ -306,7 +368,8 @@ export default function CalendarioSemanal({
       hora: esAntigua ? '' : (nota.hora || ''),
       horaFin: (!esAntigua && nota.horaFin) ? nota.horaFin : '',
       tipo: (!esAntigua && nota.tipo) ? nota.tipo : 'normal',
-      creador: (!esAntigua && (nota as Evento).creador) ? (nota as Evento).creador! : 'J'
+      creador: (!esAntigua && (nota as Evento).creador) ? (nota as Evento).creador! : 'J',
+      googleCalendarEventId: (!esAntigua && (nota as Evento).googleCalendarEventId) ? (nota as Evento).googleCalendarEventId : ''
     });
     setMostrarModalEdicion(true);
   };
@@ -321,13 +384,31 @@ export default function CalendarioSemanal({
     const notasDelDia = [...(eventos[fechaClave] || [])];
     if (eventoAEditar.index < 0 || eventoAEditar.index >= notasDelDia.length) return;
 
-    notasDelDia[eventoAEditar.index] = {
+    const notaActual = notasDelDia[eventoAEditar.index];
+    const eventoActualizado: Evento = {
       titulo: eventoAEditar.titulo.trim(),
       hora: eventoAEditar.hora || "--:--",
       horaFin: eventoAEditar.tipo === 'trabajo' ? (eventoAEditar.horaFin || '') : '',
       tipo: eventoAEditar.tipo,
-      creador: eventoAEditar.creador || obtenerInicialCreador()
+      creador: eventoAEditar.creador || obtenerInicialCreador(),
+      googleCalendarEventId: eventoAEditar.googleCalendarEventId || (typeof notaActual === 'object' ? (notaActual as Evento)?.googleCalendarEventId : undefined)
     };
+
+    // Actualizar en Google Calendar si está sincronizado
+    try {
+      const resGcal = await sincronizarEventoGoogleCalendar({
+        fechaClave,
+        evento: eventoActualizado,
+        esEdicion: true
+      });
+      if (resGcal?.googleCalendarEventId) {
+        eventoActualizado.googleCalendarEventId = resGcal.googleCalendarEventId;
+      }
+    } catch (errGcal) {
+      console.warn("No se pudo actualizar evento en Google Calendar:", errGcal);
+    }
+
+    notasDelDia[eventoAEditar.index] = eventoActualizado;
 
     const nuevosEventos = {
       ...eventos,
@@ -339,6 +420,11 @@ export default function CalendarioSemanal({
 
     try {
       await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+      registrarActividad({
+        seccion: 'agenda',
+        descripcion: `Evento editado: "${eventoAEditar.titulo.trim()}" (${eventoAEditar.hora || 'Todo el día'})`,
+        usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
+      });
     } catch (error) {
       console.error("Error al actualizar evento:", error);
       alert("Error al actualizar el evento en la nube");
@@ -350,6 +436,11 @@ export default function CalendarioSemanal({
       return;
     }
     const fechaClave = eventoAEditar.fechaClave;
+    const notaAEliminar = (eventos[fechaClave] || [])[eventoAEditar.index];
+    if (notaAEliminar && typeof notaAEliminar === 'object' && (notaAEliminar as Evento).googleCalendarEventId) {
+      eliminarEventoGoogleCalendar((notaAEliminar as Evento).googleCalendarEventId).catch(console.error);
+    }
+
     const nuevasNotas = (eventos[fechaClave] || []).filter((_, i) => i !== eventoAEditar.index);
     const nuevosEventos = { ...eventos, [fechaClave]: nuevasNotas };
 
@@ -369,6 +460,11 @@ export default function CalendarioSemanal({
       return;
     }
     const notasActuales = eventos[fechaClave] || [];
+    const notaAEliminar = notasActuales[index];
+    if (notaAEliminar && typeof notaAEliminar === 'object' && (notaAEliminar as Evento).googleCalendarEventId) {
+      eliminarEventoGoogleCalendar((notaAEliminar as Evento).googleCalendarEventId).catch(console.error);
+    }
+
     const nuevasNotas = notasActuales.filter((_, i) => i !== index);
     const nuevosEventos = { ...eventos, [fechaClave]: nuevasNotas };
 
@@ -480,6 +576,48 @@ export default function CalendarioSemanal({
             ▶
           </button>
         </div>
+      </div>
+
+      {/* ESTADO GOOGLE CALENDAR & ALARMAS */}
+      <div style={{
+        width: "100%",
+        marginBottom: "14px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "8px 12px",
+        borderRadius: "10px",
+        backgroundColor: gcalConectado ? "#f0fdf4" : "#f8fafc",
+        border: `1px solid ${gcalConectado ? '#bbf7d0' : '#e2e8f0'}`,
+        fontSize: "12px",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span>{gcalConectado ? "🟢" : "🔔"}</span>
+          <span style={{ fontWeight: 700, color: gcalConectado ? "#166534" : "#475569" }}>
+            {gcalConectado
+              ? "Google Calendar conectado (Alarmas: 30 min y 1 día antes)"
+              : "Google Calendar no sincronizado"}
+          </span>
+        </div>
+        {!gcalConectado && (
+          <button
+            onClick={manejarConectarGoogle}
+            style={{
+              background: "linear-gradient(135deg, #0047b3 0%, #003380 100%)",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "6px",
+              padding: "4px 10px",
+              fontSize: "11px",
+              fontWeight: 800,
+              cursor: "pointer",
+              boxShadow: "0 1px 3px rgba(0, 71, 179, 0.2)"
+            }}
+          >
+            Conectar
+          </button>
+        )}
       </div>
 
       {/* LISTA DE LOS 7 DÍAS DE LA SEMANA */}
@@ -750,9 +888,29 @@ export default function CalendarioSemanal({
                 ✕
               </button>
             </div>
-            <p style={{ margin: "0 0 16px 0", color: "#0047b3", fontSize: "13px", fontWeight: "600" }}>
+            <p style={{ margin: "0 0 12px 0", color: "#0047b3", fontSize: "13px", fontWeight: "600" }}>
               📅 {fechaModal.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
+
+            {/* AVISO DE ALARMAS AUTOMÁTICAS EN GOOGLE CALENDAR */}
+            <div style={{
+              backgroundColor: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '8px',
+              padding: '8px 10px',
+              marginBottom: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '11px',
+              color: '#1e40af'
+            }}>
+              <span style={{ fontSize: '15px' }}>🔔</span>
+              <div>
+                <span style={{ fontWeight: 800 }}>Alarmas en el móvil (Google Calendar):</span>{' '}
+                <span>Avisos nativos automáticos 30 min y 1 día antes.</span>
+              </div>
+            </div>
             
             {/* SELECTOR DE TIPO: NORMAL, TRABAJO O REPETIR */}
             <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
@@ -1081,6 +1239,26 @@ export default function CalendarioSemanal({
               >
                 ✕
               </button>
+            </div>
+
+            {/* AVISO DE ALARMAS AUTOMÁTICAS EN GOOGLE CALENDAR */}
+            <div style={{
+              backgroundColor: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '8px',
+              padding: '8px 10px',
+              marginBottom: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '11px',
+              color: '#1e40af'
+            }}>
+              <span style={{ fontSize: '15px' }}>🔔</span>
+              <div>
+                <span style={{ fontWeight: 800 }}>Alarmas en el móvil:</span>{' '}
+                <span>Se actualiza en Google Calendar (avisos 30 min y 1 día antes).</span>
+              </div>
             </div>
 
             <p style={{ margin: "0 0 14px 0", color: "#0047b3", fontSize: "13px", fontWeight: "600" }}>

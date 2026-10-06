@@ -9,7 +9,7 @@ import {
   doc,
   onSnapshot
 } from 'firebase/firestore';
-import { registrarActividad } from '../utils/actividad';
+import { registrarActividad, formatearNombreFamiliar } from '../utils/actividad';
 
 export interface ArticuloCompra {
   id?: string;
@@ -77,9 +77,9 @@ export default function ListaCompra({ usuario, onIrAFinanzas }: ListaCompraProps
   const [guardandoGasto, setGuardandoGasto] = useState<boolean>(false);
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
 
-  // Nombre amigable del usuario
+  // Nombre amigable del usuario (Joel o Ana)
   const emailUsuario = usuario?.email?.toLowerCase() || '';
-  const nombreAutor = usuario?.displayName || (emailUsuario.includes('joel') ? 'Joel' : (emailUsuario.includes('aijg') ? 'Arantxa' : (emailUsuario.split('@')[0] || 'Familia')));
+  const nombreAutor = formatearNombreFamiliar(usuario?.displayName, emailUsuario);
 
   // Sincronización en tiempo real con Firestore (colección 'lista_compra')
   useEffect(() => {
@@ -629,7 +629,7 @@ export default function ListaCompra({ usuario, onIrAFinanzas }: ListaCompraProps
                       </span>
                       {art.creadoPor && (
                         <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                          por {art.creadoPor}
+                          por {formatearNombreFamiliar(art.creadoPor, art.creadorEmail)}
                         </span>
                       )}
                     </div>
