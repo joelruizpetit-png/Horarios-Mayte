@@ -8,6 +8,10 @@ import {
   deleteDoc, 
   onSnapshot 
 } from 'firebase/firestore';
+import { 
+  MENU_OCTUBRE_2026, 
+  sincronizarMenuOctubreFirestore 
+} from '../data/menuOctubre2026';
 
 export interface MenuDia {
   fecha: string; // Formato YYYY-MM-DD
@@ -18,6 +22,11 @@ export interface MenuDia {
   actualizadoPor?: string;
   actualizadoEl?: string;
 }
+
+const MAPA_MENU_OCTUBRE = MENU_OCTUBRE_2026.reduce((acc, item) => {
+  acc[item.fecha] = item;
+  return acc;
+}, {} as Record<string, MenuDia>);
 
 interface MenuEscolarAlmaProps {
   usuario?: { email?: string | null } | null;
@@ -77,6 +86,40 @@ export default function MenuEscolarAlma({
   const [observaciones, setObservaciones] = useState<string>('');
   const [guardando, setGuardando] = useState<boolean>(false);
   const [mensajeToast, setMensajeToast] = useState<string | null>(null);
+  const [sincronizandoOctubre, setSincronizandoOctubre] = useState<boolean>(false);
+
+  // Sincronización automática de octubre 2026 en Firestore al iniciar sesión
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const yaSincronizado = localStorage.getItem('menu_octubre_2026_sincronizado_v1_3_0');
+    if (!yaSincronizado && usuario?.email) {
+      sincronizarMenuOctubreFirestore(db, usuario.email).then((res) => {
+        if (res.exito) {
+          localStorage.setItem('menu_octubre_2026_sincronizado_v1_3_0', 'true');
+          mostrarNotificacion(`✓ ${res.total} menús de octubre sincronizados en Firestore`);
+        }
+      });
+    }
+  }, [usuario?.email]);
+
+  const manejarSincronizarOctubre = async () => {
+    setSincronizandoOctubre(true);
+    try {
+      const email = usuario?.email || 'admin@planificador';
+      const res = await sincronizarMenuOctubreFirestore(db, email);
+      if (res.exito) {
+        localStorage.setItem('menu_octubre_2026_sincronizado_v1_3_0', 'true');
+        mostrarNotificacion(`✓ ${res.total} menús escolares de octubre cargados en Firestore`);
+      } else {
+        alert("Hubo un error al guardar los menús en Firestore.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error al sincronizar el menú de octubre.");
+    } finally {
+      setSincronizandoOctubre(false);
+    }
+  };
 
   // Suscripción en tiempo real a la colección aislada en Firestore: 'menu_escolar_alma'
   useEffect(() => {
@@ -139,7 +182,7 @@ export default function MenuEscolarAlma({
   const abrirModalParaDia = (dia: Date) => {
     setDiaModal(dia);
     const iso = formatearFechaISO(dia);
-    const menuExistente = menus[iso];
+    const menuExistente = menus[iso] || MAPA_MENU_OCTUBRE[iso];
 
     if (menuExistente) {
       setPrimerPlato(menuExistente.primerPlato || '');
@@ -156,7 +199,7 @@ export default function MenuEscolarAlma({
     setModalAbierto(true);
   };
 
-  // Guardar menú en Firestore
+  // Guardar menú en Firestore (en ambas colecciones: 'menu_escolar' y 'menu_escolar_alma')
   const guardarMenu = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!diaModal) return;
@@ -170,7 +213,8 @@ export default function MenuEscolarAlma({
     setGuardando(true);
 
     try {
-      const docRef = doc(db, "menu_escolar_alma", iso);
+      const docRefAlma = doc(db, "menu_escolar_alma", iso);
+      const docRefEscolar = doc(db, "menu_escolar", iso);
       const datosAGuardar: MenuDia = {
         fecha: iso,
         primerPlato: primerPlato.trim(),
@@ -181,7 +225,10 @@ export default function MenuEscolarAlma({
         actualizadoEl: new Date().toISOString()
       };
 
-      await setDoc(docRef, datosAGuardar);
+      await Promise.all([
+        setDoc(docRefAlma, datosAGuardar),
+        setDoc(docRefEscolar, datosAGuardar)
+      ]);
       setModalAbierto(false);
       mostrarNotificacion("✓ Menú escolar guardado con éxito");
     } catch (error) {
@@ -192,14 +239,17 @@ export default function MenuEscolarAlma({
     }
   };
 
-  // Eliminar menú de un día
+  // Eliminar menú de un día (en ambas colecciones)
   const eliminarMenu = async (iso: string) => {
     if (!confirm("¿Deseas eliminar el menú escolar de este día?")) {
       return;
     }
 
     try {
-      await deleteDoc(doc(db, "menu_escolar_alma", iso));
+      await Promise.all([
+        deleteDoc(doc(db, "menu_escolar_alma", iso)),
+        deleteDoc(doc(db, "menu_escolar", iso))
+      ]);
       if (modalAbierto) {
         setModalAbierto(false);
       }
@@ -273,10 +323,36 @@ export default function MenuEscolarAlma({
               Menú Escolar de Alma
             </h2>
             <p style={{ margin: '2px 0 0 0', fontSize: '12px', opacity: 0.85 }}>
-              Lunes a Viernes • Consulta y registro de platos
+              Institut Escola Castellterçol • Octubre 2026
             </p>
           </div>
         </div>
+
+        <button
+          onClick={manejarSincronizarOctubre}
+          disabled={sincronizandoOctubre}
+          title="Sincronizar los 22 días lectivos de octubre de Alma en Firestore (menu_escolar y menu_escolar_alma)"
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.2)',
+            color: '#ffffff',
+            border: '1px solid rgba(255, 255, 255, 0.4)',
+            borderRadius: '8px',
+            padding: '7px 12px',
+            fontSize: '11px',
+            fontWeight: 800,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            transition: 'all 0.15s ease',
+            whiteSpace: 'nowrap',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}
+          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)')}
+          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)')}
+        >
+          {sincronizandoOctubre ? '⏳ Guardando...' : '📥 Guardar en Firestore'}
+        </button>
       </div>
 
       {/* BARRA DE NAVEGACIÓN SEMANAL (LUNES A VIERNES) */}
@@ -386,7 +462,7 @@ export default function MenuEscolarAlma({
           diasLaborales.map((dia, idx) => {
             const iso = formatearFechaISO(dia);
             const esHoy = iso === hoyISO;
-            const menuDelDia = menus[iso];
+            const menuDelDia = menus[iso] || MAPA_MENU_OCTUBRE[iso];
             const tieneMenu = Boolean(menuDelDia && (menuDelDia.primerPlato || menuDelDia.segundoPlato || menuDelDia.postre));
 
             return (

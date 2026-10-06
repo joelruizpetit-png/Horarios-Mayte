@@ -1,6 +1,6 @@
 // app/data/version.ts
 
-export const APP_VERSION = "1.2.0";
+export const APP_VERSION = "1.3.0";
 
 export interface ItemNovedadVersion {
   icono: string;
@@ -24,9 +24,17 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
   fecha: "Octubre 2026",
   items: [
     {
+      icono: "🍱",
+      titulo: "¡Menú Escolar de Octubre de Alma cargado!",
+      descripcion: "Carga completa plato por plato de todos los días lectivos de octubre de Alma (Institut Escola Castellterçol, Moianès): Primer plato, Segundo plato, Postre, valores nutricionales y el Menú Especial de la Castanyada del 30 de octubre.",
+      badge: "Menú Escolar",
+      badgeColor: "#059669",
+      badgeBg: "#ecfdf5"
+    },
+    {
       icono: "🚀",
-      titulo: "¡Bienvenido a AJA v1.2.0!",
-      descripcion: "Tu sistema operativo familiar (Ana, Joel y Alma) se renueva con más velocidad, estabilidad y diseño optimizado.",
+      titulo: "¡Bienvenido a AJA v1.3.0!",
+      descripcion: "Tu sistema operativo familiar (Ana, Joel y Alma) se actualiza con sincronización directa en Firestore de las comidas escolares de Alma y mejoras generales.",
       badge: "Nueva Versión",
       badgeColor: "#0047b3",
       badgeBg: "#eff6ff"

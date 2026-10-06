@@ -10,7 +10,7 @@ import FinanzasFamiliares from './components/FinanzasFamiliares';
 import ListaCompra from './components/ListaCompra';
 import ModalNovedades from './components/ModalNovedades';
 import ModalVersion from './components/ModalVersion';
-import { auth, googleCalendarProvider } from './firebase';
+import { auth, db, googleCalendarProvider } from './firebase';
 import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
@@ -20,6 +20,7 @@ import {
   User
 } from 'firebase/auth';
 import { guardarTokenGoogleCalendar, limpiarTokenGoogleCalendar } from './utils/googleCalendar';
+import { sincronizarMenuOctubreFirestore } from './data/menuOctubre2026';
 
 const CORREOS_AUTORIZADOS = [
   "joelruizpetit@gmail.com",
@@ -51,6 +52,16 @@ export default function Home() {
           return;
         }
         setTabActiva('general'); // Pestaña 'General' activa por defecto al iniciar sesión
+
+        // Sincronizar automáticamente en Firestore el menú escolar de octubre de Alma si no se ha hecho
+        const syncOct = typeof window !== 'undefined' ? localStorage.getItem('menu_octubre_2026_sincronizado_v1_3_0') : 'true';
+        if (!syncOct && user.email) {
+          sincronizarMenuOctubreFirestore(db, user.email).then((res) => {
+            if (res.exito && typeof window !== 'undefined') {
+              localStorage.setItem('menu_octubre_2026_sincronizado_v1_3_0', 'true');
+            }
+          });
+        }
       }
       setUsuario(user);
       setLoading(false);

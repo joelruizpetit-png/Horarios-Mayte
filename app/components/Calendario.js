@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { db, auth } from '../firebase'; 
@@ -9,7 +9,10 @@ import {
   sincronizarEventoGoogleCalendar,
   eliminarEventoGoogleCalendar,
   estaGoogleCalendarConectado,
-  conectarGoogleCalendar
+  conectarGoogleCalendar,
+  asegurarTokenGoogleCalendar,
+  obtenerEventosGoogleCalendar,
+  combinarEventosLocalesYGoogle
 } from '../utils/googleCalendar';
 
 /**
@@ -57,15 +60,56 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
 
   // Estado de sincronización con Google Calendar
   const [gcalConectado, setGcalConectado] = useState(false);
+  const [eventosGoogle, setEventosGoogle] = useState({});
+  const [cargandoGoogle, setCargandoGoogle] = useState(false);
 
   useEffect(() => {
     setGcalConectado(estaGoogleCalendarConectado());
   }, []);
 
+  // 2. LECTURA Y SINCRONIZACIÓN (Google Calendar -> App):
+  // Llamada GET a la API de Google Calendar para obtener los eventos del usuario del mes activo
+  const cargarEventosGoogle = useCallback(async (fechaReferencia = date) => {
+    if (!estaGoogleCalendarConectado()) {
+      setEventosGoogle({});
+      return;
+    }
+
+    try {
+      setCargandoGoogle(true);
+      const y = fechaReferencia.getFullYear();
+      const m = fechaReferencia.getMonth();
+      const fechaInicio = new Date(y, m - 1, 1, 0, 0, 0);
+      const fechaFin = new Date(y, m + 2, 0, 23, 59, 59);
+
+      const res = await obtenerEventosGoogleCalendar({ fechaInicio, fechaFin });
+      if (res.exito) {
+        setEventosGoogle(res.eventos);
+      } else if (res.necesitaReconexion) {
+        setGcalConectado(false);
+      }
+    } catch (err) {
+      console.warn("Error al cargar eventos de Google Calendar:", err);
+    } finally {
+      setCargandoGoogle(false);
+    }
+  }, [date]);
+
+  // Cargar eventos de Google Calendar al montar o al cambiar de mes o estado de conexión
+  useEffect(() => {
+    cargarEventosGoogle(date);
+  }, [date.getFullYear(), date.getMonth(), gcalConectado, cargarEventosGoogle]);
+
+  // Combinación y sincronización de eventos locales de Firestore con eventos de Google Calendar
+  const eventosCombinados = useMemo(() => {
+    return combinarEventosLocalesYGoogle(eventos, eventosGoogle);
+  }, [eventos, eventosGoogle]);
+
   const manejarConectarGoogle = async () => {
     const token = await conectarGoogleCalendar();
     if (token) {
       setGcalConectado(true);
+      await cargarEventosGoogle(date);
       alert("¡Google Calendar conectado con éxito! Tus eventos se sincronizarán con alarmas nativas (30 min y 1 día antes) en tu móvil.");
     }
   };
@@ -87,7 +131,13 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
     return `${y}-${m}-${day}`;
   };
 
-  const abrirModalCrear = () => {
+  const abrirModalCrear = async () => {
+    // Al pulsar "+ Añadir", recuperar y asegurar el accessToken de Google Auth del usuario actual
+    const token = await asegurarTokenGoogleCalendar();
+    if (token) {
+      setGcalConectado(true);
+    }
+
     const hoyStr = toISODate(date);
     setFechaInicioRep(hoyStr);
 
@@ -259,11 +309,18 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
         evento: eventoAGuardar,
         solicitarPermisoSiFalta: false
       });
-      if (resGcal?.googleCalendarEventId) {
+      if (resGcal?.exito && resGcal?.googleCalendarEventId) {
         eventoAGuardar.googleCalendarEventId = resGcal.googleCalendarEventId;
+      } else if (resGcal?.error) {
+        // Alerta visual clara si la API de Google responde con error
+        alert("⚠️ Aviso de Google Calendar:\n" + resGcal.error + "\n\nEl evento se guardará en la Agenda familiar.");
+        if (resGcal.necesitaReconexion) {
+          setGcalConectado(false);
+        }
       }
     } catch (errGcal) {
       console.warn("No se pudo sincronizar evento con Google Calendar:", errGcal);
+      alert("⚠️ Error de conexión con Google Calendar. El evento se guardará en la Agenda familiar.");
     }
 
     const nuevosEventos = {
@@ -283,6 +340,8 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
         descripcion: `Nuevo evento: "${nuevoEvento.titulo.trim()}" (${nuevoEvento.hora || 'Todo el día'}) para el ${fechaFormato}`,
         usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
       });
+      // Refrescar lectura de eventos de Google Calendar
+      cargarEventosGoogle(date);
     } catch (error) {
       console.error("Error al guardar:", error);
       alert("Error al guardar en la nube");
@@ -331,11 +390,17 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
         evento: eventoActualizado,
         esEdicion: true
       });
-      if (resGcal?.googleCalendarEventId) {
+      if (resGcal?.exito && resGcal?.googleCalendarEventId) {
         eventoActualizado.googleCalendarEventId = resGcal.googleCalendarEventId;
+      } else if (resGcal?.error) {
+        alert("⚠️ Aviso de Google Calendar:\n" + resGcal.error);
+        if (resGcal.necesitaReconexion) {
+          setGcalConectado(false);
+        }
       }
     } catch (errGcal) {
       console.warn("No se pudo actualizar en Google Calendar:", errGcal);
+      alert("⚠️ Error al actualizar el evento en Google Calendar.");
     }
 
     notasDelDia[eventoAEditar.index] = eventoActualizado;
@@ -355,6 +420,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
         descripcion: `Evento editado: "${eventoAEditar.titulo.trim()}" (${eventoAEditar.hora || 'Todo el día'})`,
         usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
       });
+      cargarEventosGoogle(date);
     } catch (error) {
       console.error("Error al actualizar evento:", error);
       alert("Error al actualizar el evento en la nube");
@@ -386,30 +452,51 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
   };
 
   const borrarNota = async (index) => {
+    const fechaClave = date.toDateString();
+    const listaActual = eventosCombinados[fechaClave] || [];
+    const notaAEliminar = listaActual[index];
+
+    if (!notaAEliminar) return;
+
+    // Si es un evento exclusivo de Google Calendar
+    if (typeof notaAEliminar === 'object' && notaAEliminar.esGoogleCalendar) {
+      if (!window.confirm("¿Deseas eliminar este evento de tu Google Calendar?")) return;
+      if (notaAEliminar.googleCalendarEventId) {
+        await eliminarEventoGoogleCalendar(notaAEliminar.googleCalendarEventId);
+      }
+      cargarEventosGoogle(date);
+      return;
+    }
+
     if (!window.confirm("¿Estás seguro de que deseas eliminar este evento?")) {
       return;
     }
-    const fechaClave = date.toDateString();
-    const notaAEliminar = (eventos[fechaClave] || [])[index];
-    if (notaAEliminar && typeof notaAEliminar === 'object' && notaAEliminar.googleCalendarEventId) {
+
+    if (typeof notaAEliminar === 'object' && notaAEliminar.googleCalendarEventId) {
       eliminarEventoGoogleCalendar(notaAEliminar.googleCalendarEventId).catch(console.error);
     }
 
-    const nuevasNotas = (eventos[fechaClave] || []).filter((_, i) => i !== index);
-    const nuevosEventos = { ...eventos, [fechaClave]: nuevasNotas };
+    // Filtrar de los eventos locales de Firestore
+    const notasFirestore = (eventos[fechaClave] || []).filter((n) => {
+      if (typeof n === 'string') return n !== notaAEliminar;
+      return n?.titulo !== notaAEliminar?.titulo;
+    });
+    const nuevosEventos = { ...eventos, [fechaClave]: notasFirestore };
 
     setEventos(nuevosEventos);
     await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+    cargarEventosGoogle(date);
   };
 
-  // --- LÓGICA DE MARCADORES CON INICIALES DEL CREADOR (J y A) Y DEPORTES ---
+  // --- LÓGICA DE MARCADORES CON INICIALES DEL CREADOR (J y A), GOOGLE Y DEPORTES ---
   const tileContent = ({ date, view }) => {
     if (view === 'month') {
       const fechaClave = date.toDateString();
-      const eventosDelDia = eventos[fechaClave] || [];
+      const eventosDelDia = eventosCombinados[fechaClave] || [];
 
       if (eventosDelDia.length > 0) {
         let hayDeportes = false;
+        let hayGoogle = false;
         // Mapear combinaciones únicas de creador y tipo para eventos no deportivos
         const marcadoresMap = new Map();
 
@@ -418,6 +505,11 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
           if (esEventoDeporte(e)) {
             hayDeportes = true;
             return; // NO mostrar ni 'J' ni 'A'
+          }
+
+          if (e.esGoogleCalendar || e.tipo === 'google') {
+            hayGoogle = true;
+            return;
           }
 
           const esAntigua = typeof e === 'string';
@@ -441,7 +533,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
         const marcadores = Array.from(marcadoresMap.values());
         marcadores.sort((a, b) => a.creador.localeCompare(b.creador));
 
-        if (marcadores.length === 0 && !hayDeportes) {
+        if (marcadores.length === 0 && !hayDeportes && !hayGoogle) {
           return null;
         }
 
@@ -450,7 +542,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            gap: '4px',
+            gap: '3px',
             marginTop: '3px',
             lineHeight: 1
           }}>
@@ -459,18 +551,47 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
               return (
                 <span
                   key={idx}
-                  className={esTrabajo ? "marcador-inicial-trabajo" : "marcador-inicial-normal"}
+                  title={`Evento de ${m.creador === 'J' ? 'Joel' : 'Ana'}`}
                   style={{
-                    fontSize: '11px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '8px',
                     fontWeight: '800',
-                    color: esTrabajo ? '#111827' : '#EF4444',
-                    letterSpacing: '0.2px'
+                    color: '#ffffff',
+                    backgroundColor: esTrabajo ? '#111827' : '#EF4444',
+                    width: '13px',
+                    height: '13px',
+                    borderRadius: '50%',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.25)'
                   }}
                 >
                   {m.creador}
                 </span>
               );
             })}
+
+            {hayGoogle && (
+              <span
+                title="Evento sincronizado de Google Calendar"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '8px',
+                  fontWeight: '800',
+                  color: '#ffffff',
+                  backgroundColor: '#2563eb',
+                  width: '13px',
+                  height: '13px',
+                  borderRadius: '50%',
+                  boxShadow: '0 1px 2px rgba(37,99,235,0.3)'
+                }}
+              >
+                G
+              </span>
+            )}
+
             {hayDeportes && (
               <span
                 className="marcador-circulo-deporte"
@@ -495,7 +616,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
   };
 
   const fechaActual = date.toDateString();
-  const listaNotas = eventos[fechaActual] || [];
+  const listaNotas = eventosCombinados[fechaActual] || [];
 
   return (
     <div 
@@ -621,18 +742,22 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                 const horaInicio = esAntigua ? "--:--" : nota.hora;
                 const esDeporte = esEventoDeporte(nota);
                 const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
-                // Para eventos de deporte: NO mostrar creador ni 'J' ni 'A'
-                const creador = esDeporte ? '' : (!esAntigua && nota.creador ? nota.creador.toUpperCase() : (esTrabajo ? 'J' : ''));
+                const esGoogle = !esAntigua && (nota.esGoogleCalendar || nota.tipo === 'google');
+                // Para eventos de deporte o google: tratamiento específico
+                const creador = (esDeporte || esGoogle) ? '' : (!esAntigua && nota.creador ? nota.creador.toUpperCase() : (esTrabajo ? 'J' : ''));
                 
                 // Si es trabajo y tiene hora fin, mostramos el rango (Ej: 08:00 - 15:00)
                 let textoHora = horaInicio;
-                if (esTrabajo && nota.horaFin) {
+                if ((esTrabajo || esGoogle) && nota.horaFin) {
                     textoHora = `${horaInicio} - ${nota.horaFin}`;
                 }
 
                 let borderColor = '#9ca3af';
                 let bgColor = '#f9fafb';
-                if (esDeporte) {
+                if (esGoogle) {
+                  borderColor = '#2563eb';
+                  bgColor = '#eff6ff';
+                } else if (esDeporte) {
                   borderColor = '#FACC15';
                   bgColor = '#fefce8';
                 } else if (esTrabajo) {
@@ -662,7 +787,19 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                   >
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
-                        {esDeporte ? (
+                        {esGoogle ? (
+                          <span style={{
+                            fontSize: "10px",
+                            fontWeight: "800",
+                            padding: "1px 6px",
+                            borderRadius: "4px",
+                            backgroundColor: "#2563eb",
+                            color: "#ffffff",
+                            letterSpacing: "0.5px"
+                          }}>
+                            📅 Google
+                          </span>
+                        ) : esDeporte ? (
                           <span
                             title="Evento deportivo"
                             style={{
@@ -692,10 +829,10 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                         )}
                         <span style={{ 
                           fontSize: "12px", 
-                          color: esDeporte ? "#a16207" : (esTrabajo ? "#0070f3" : "#4b5563"), 
+                          color: esGoogle ? "#1d4ed8" : (esDeporte ? "#a16207" : (esTrabajo ? "#0070f3" : "#4b5563")), 
                           fontWeight: "bold" 
                         }}>
-                          {esDeporte ? "🏆 " + textoHora : (esTrabajo ? "💼 " + textoHora : "🕒 " + textoHora)}
+                          {esGoogle ? "📅 " + textoHora : (esDeporte ? "🏆 " + textoHora : (esTrabajo ? "💼 " + textoHora : "🕒 " + textoHora))}
                         </span>
                       </div>
                       <span style={{ fontSize: "15px", fontWeight: (esTrabajo || esDeporte) ? "700" : "600", color: "#111827" }}>
@@ -708,7 +845,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                         borrarNota(index);
                       }}
                       style={{ marginLeft: "10px", color: "#dc2626", border: "none", background: "none", cursor: "pointer", fontSize: "16px", padding: "4px" }}
-                      title="Eliminar evento"
+                      title={esGoogle ? "Eliminar de Google Calendar" : "Eliminar evento"}
                       aria-label="Borrar nota"
                     >
                       🗑️

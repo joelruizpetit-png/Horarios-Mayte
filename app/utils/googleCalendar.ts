@@ -9,6 +9,14 @@ export interface EventoAgendaGC {
   categoria?: string;
   creador?: string;
   googleCalendarEventId?: string;
+  esGoogleCalendar?: boolean;
+}
+
+export interface ResultadoSincronizacionGC {
+  exito: boolean;
+  googleCalendarEventId?: string;
+  error?: string;
+  necesitaReconexion?: boolean;
 }
 
 const STORAGE_KEY_TOKEN = 'google_calendar_token';
@@ -26,9 +34,8 @@ export function obtenerTokenGoogleCalendar(): string | null {
 
   if (timestampStr) {
     const elapsed = Date.now() - Number(timestampStr);
-    // Los tokens de OAuth de Google expiran a los 60 minutos (3600s)
+    // Los tokens de OAuth de Google expiran a los 60 minutos (3600s). Si han pasado más de 55m, lo consideramos por expirar
     if (elapsed > 55 * 60 * 1000) {
-      // Expirado o a punto de expirar
       return null;
     }
   }
@@ -63,7 +70,7 @@ export function estaGoogleCalendarConectado(): boolean {
 
 /**
  * Solicita interactivamente permisos para Google Calendar mediante ventana emergente de Google.
- * Útil cuando el usuario pulsa "Conectar Google Calendar" o al guardar un evento si el token expiró.
+ * Útil cuando el usuario pulsa "+ Añadir", "Conectar Google Calendar" o al guardar un evento.
  */
 export async function conectarGoogleCalendar(): Promise<string | null> {
   try {
@@ -82,6 +89,21 @@ export async function conectarGoogleCalendar(): Promise<string | null> {
       return null;
     }
     console.error('Error al autorizar Google Calendar:', error);
+  }
+  return null;
+}
+
+/**
+ * Asegura la disponibilidad del token de Google Calendar.
+ * Si no está disponible y `promptSiFalta` es true, invoca la ventana interactiva.
+ */
+export async function asegurarTokenGoogleCalendar(promptSiFalta = false): Promise<string | null> {
+  let token = obtenerTokenGoogleCalendar();
+  if (token) return token;
+
+  if (promptSiFalta) {
+    token = await conectarGoogleCalendar();
+    return token;
   }
   return null;
 }
@@ -173,7 +195,8 @@ export function prepararPayloadGoogleCalendar(fechaClave: string, evento: Evento
 }
 
 /**
- * Inserta un nuevo evento en el Google Calendar principal ('primary').
+ * 1. ESCRITURA: Inserta un nuevo evento en el Google Calendar principal ('primary').
+ * Devuelve un resultado detallado con control de errores para alertas visuales.
  */
 export async function insertarEventoGoogleCalendar({
   fechaClave,
@@ -183,11 +206,14 @@ export async function insertarEventoGoogleCalendar({
   fechaClave: string;
   evento: EventoAgendaGC;
   token?: string;
-}): Promise<string | null> {
+}): Promise<ResultadoSincronizacionGC> {
   const authToken = token || obtenerTokenGoogleCalendar();
   if (!authToken) {
-    console.warn('Google Calendar no sincronizado: falta token de acceso OAuth.');
-    return null;
+    return {
+      exito: false,
+      error: 'Google Calendar no conectado: falta el token de acceso. Pulsa "Conectar Google Calendar" para activar alarmas.',
+      necesitaReconexion: true
+    };
   }
 
   const payload = prepararPayloadGoogleCalendar(fechaClave, evento);
@@ -204,21 +230,40 @@ export async function insertarEventoGoogleCalendar({
 
     if (res.status === 401) {
       limpiarTokenGoogleCalendar();
-      console.warn('Token de Google Calendar expirado (401).');
-      return null;
+      return {
+        exito: false,
+        error: 'La sesión de Google Calendar ha caducado (401). Pulsa "Conectar" para renovar la sincronización.',
+        necesitaReconexion: true
+      };
+    }
+
+    if (res.status === 403) {
+      return {
+        exito: false,
+        error: 'Permisos insuficientes en Google Calendar (403). Falta autorizar el acceso de eventos.',
+        necesitaReconexion: true
+      };
     }
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error(`Error al insertar evento en Google Calendar (${res.status}):`, errText);
-      return null;
+      return {
+        exito: false,
+        error: `Error de Google Calendar API (${res.status}): ${errText}`
+      };
     }
 
     const data = await res.json();
-    return data.id || null;
+    return {
+      exito: true,
+      googleCalendarEventId: data.id || undefined
+    };
   } catch (error) {
     console.error('Error de red al insertar en Google Calendar:', error);
-    return null;
+    return {
+      exito: false,
+      error: 'Error de red o conexión al comunicar con Google Calendar API.'
+    };
   }
 }
 
@@ -236,10 +281,14 @@ export async function actualizarEventoGoogleCalendar({
   fechaClave: string;
   evento: EventoAgendaGC;
   token?: string;
-}): Promise<string | null> {
+}): Promise<ResultadoSincronizacionGC> {
   const authToken = token || obtenerTokenGoogleCalendar();
   if (!authToken) {
-    return null;
+    return {
+      exito: false,
+      error: 'Falta token de acceso para actualizar en Google Calendar.',
+      necesitaReconexion: true
+    };
   }
 
   const payload = prepararPayloadGoogleCalendar(fechaClave, evento);
@@ -256,7 +305,11 @@ export async function actualizarEventoGoogleCalendar({
 
     if (res.status === 401) {
       limpiarTokenGoogleCalendar();
-      return null;
+      return {
+        exito: false,
+        error: 'La sesión de Google Calendar ha caducado (401).',
+        necesitaReconexion: true
+      };
     }
 
     if (res.status === 404) {
@@ -266,15 +319,23 @@ export async function actualizarEventoGoogleCalendar({
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error(`Error al actualizar evento en Google Calendar (${res.status}):`, errText);
-      return null;
+      return {
+        exito: false,
+        error: `Error al actualizar en Google Calendar (${res.status}): ${errText}`
+      };
     }
 
     const data = await res.json();
-    return data.id || eventId;
+    return {
+      exito: true,
+      googleCalendarEventId: data.id || eventId
+    };
   } catch (error) {
     console.error('Error de red al actualizar en Google Calendar:', error);
-    return null;
+    return {
+      exito: false,
+      error: 'Error de red al actualizar evento en Google Calendar.'
+    };
   }
 }
 
@@ -308,7 +369,7 @@ export async function eliminarEventoGoogleCalendar(eventId?: string, token?: str
 
 /**
  * Función principal para sincronizar un evento con Google Calendar (inserción o actualización).
- * Retorna el ID de Google Calendar asignado y el estado de la operación.
+ * Retorna un resultado detallado con ID, éxito y mensaje de error si aplica.
  */
 export async function sincronizarEventoGoogleCalendar({
   fechaClave,
@@ -320,7 +381,7 @@ export async function sincronizarEventoGoogleCalendar({
   evento: EventoAgendaGC;
   esEdicion?: boolean;
   solicitarPermisoSiFalta?: boolean;
-}): Promise<{ googleCalendarEventId?: string; exito: boolean }> {
+}): Promise<ResultadoSincronizacionGC> {
   let token = obtenerTokenGoogleCalendar();
 
   if (!token && solicitarPermisoSiFalta) {
@@ -328,31 +389,214 @@ export async function sincronizarEventoGoogleCalendar({
   }
 
   if (!token) {
-    return { exito: false };
+    return {
+      exito: false,
+      error: 'Google Calendar no conectado. Conecta tu cuenta para sincronizar y activar alertas.',
+      necesitaReconexion: true
+    };
   }
 
   const existingId = evento.googleCalendarEventId;
 
   if (esEdicion && existingId) {
-    const updatedId = await actualizarEventoGoogleCalendar({
+    return await actualizarEventoGoogleCalendar({
       eventId: existingId,
       fechaClave,
       evento,
       token
     });
-    return {
-      googleCalendarEventId: updatedId || existingId,
-      exito: !!updatedId
-    };
   } else {
-    const newId = await insertarEventoGoogleCalendar({
+    return await insertarEventoGoogleCalendar({
       fechaClave,
       evento,
       token
     });
+  }
+}
+
+/**
+ * 2. LECTURA Y SINCRONIZACIÓN (Google Calendar -> App):
+ * Obtiene los eventos del usuario de Google Calendar para un rango de fechas (mes/día).
+ */
+export async function obtenerEventosGoogleCalendar({
+  fechaInicio,
+  fechaFin,
+  token
+}: {
+  fechaInicio: Date;
+  fechaFin: Date;
+  token?: string;
+}): Promise<{
+  exito: boolean;
+  eventos: Record<string, EventoAgendaGC[]>;
+  error?: string;
+  necesitaReconexion?: boolean;
+}> {
+  const authToken = token || obtenerTokenGoogleCalendar();
+  if (!authToken) {
+    return { exito: false, eventos: {} };
+  }
+
+  const timeMin = fechaInicio.toISOString();
+  const timeMax = fechaFin.toISOString();
+
+  try {
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=250`;
+
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (res.status === 401) {
+      limpiarTokenGoogleCalendar();
+      return {
+        exito: false,
+        eventos: {},
+        error: 'Sesión de Google Calendar caducada (401).',
+        necesitaReconexion: true
+      };
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return {
+        exito: false,
+        eventos: {},
+        error: `Error al leer eventos de Google Calendar (${res.status}): ${errText}`
+      };
+    }
+
+    const data = await res.json();
+    const items = data.items || [];
+    const eventosPorDia: Record<string, EventoAgendaGC[]> = {};
+
+    items.forEach((item: any) => {
+      if (item.status === 'cancelled') return;
+
+      let fechaClave = '';
+      let hora = '--:--';
+      let horaFin = '';
+
+      if (item.start?.dateTime) {
+        const dInicio = new Date(item.start.dateTime);
+        fechaClave = dInicio.toDateString();
+        hora = dInicio.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+        if (item.end?.dateTime) {
+          const dFin = new Date(item.end.dateTime);
+          horaFin = dFin.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+      } else if (item.start?.date) {
+        // Evento de todo el día ("YYYY-MM-DD"). En Google Calendar la fecha de fin es exclusiva
+        const [y, m, d] = item.start.date.split('-').map(Number);
+        const dInicio = new Date(y, m - 1, d);
+        let dFin = new Date(dInicio);
+        if (item.end?.date) {
+          const [ey, em, ed] = item.end.date.split('-').map(Number);
+          dFin = new Date(ey, em - 1, ed);
+        } else {
+          dFin.setDate(dFin.getDate() + 1);
+        }
+
+        const cursor = new Date(dInicio);
+        while (cursor < dFin) {
+          const k = cursor.toDateString();
+          if (!eventosPorDia[k]) {
+            eventosPorDia[k] = [];
+          }
+          eventosPorDia[k].push({
+            titulo: item.summary?.trim() || '(Sin título en Google Calendar)',
+            hora: '--:--',
+            horaFin: '',
+            tipo: 'google',
+            categoria: 'Google Calendar',
+            creador: 'G',
+            googleCalendarEventId: item.id,
+            esGoogleCalendar: true
+          });
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        return;
+      }
+
+      if (!fechaClave) return;
+
+      if (!eventosPorDia[fechaClave]) {
+        eventosPorDia[fechaClave] = [];
+      }
+
+      eventosPorDia[fechaClave].push({
+        titulo: item.summary?.trim() || '(Sin título en Google Calendar)',
+        hora,
+        horaFin,
+        tipo: 'google',
+        categoria: 'Google Calendar',
+        creador: 'G',
+        googleCalendarEventId: item.id,
+        esGoogleCalendar: true
+      });
+    });
+
+    return { exito: true, eventos: eventosPorDia };
+  } catch (error) {
+    console.error('Error de red al consultar Google Calendar API:', error);
     return {
-      googleCalendarEventId: newId || undefined,
-      exito: !!newId
+      exito: false,
+      eventos: {},
+      error: 'Error de conexión al obtener eventos de Google Calendar'
     };
   }
+}
+
+/**
+ * Combina y sincroniza los eventos de Google Calendar con los eventos locales de Firestore,
+ * evitando duplicados por ID de Google Calendar o por coincidencia de título y hora.
+ */
+export function combinarEventosLocalesYGoogle(
+  eventosLocales: Record<string, any[]>,
+  eventosGoogle: Record<string, EventoAgendaGC[]>
+): Record<string, any[]> {
+  const resultado: Record<string, any[]> = {};
+
+  // 1. Copiar eventos locales de Firestore
+  Object.keys(eventosLocales).forEach((key) => {
+    resultado[key] = [...(eventosLocales[key] || [])];
+  });
+
+  // 2. Fusionar eventos de Google Calendar
+  Object.keys(eventosGoogle).forEach((fechaClave) => {
+    const listaLocal = resultado[fechaClave] ? [...resultado[fechaClave]] : [];
+    const listaGoogle = eventosGoogle[fechaClave] || [];
+
+    listaGoogle.forEach((gEvent) => {
+      // Verificar si ya existe en Firestore para evitar duplicados:
+      // a) Por googleCalendarEventId
+      const yaExistePorId = listaLocal.some((loc) => {
+        if (typeof loc === 'string') return false;
+        return loc?.googleCalendarEventId && loc.googleCalendarEventId === gEvent.googleCalendarEventId;
+      });
+
+      // b) Por coincidencia exacta de título y hora
+      const yaExistePorTituloYHora = listaLocal.some((loc) => {
+        const titLoc = typeof loc === 'string' ? loc : loc?.titulo;
+        const horaLoc = typeof loc === 'string' ? '--:--' : (loc?.hora || '--:--');
+        return (
+          titLoc &&
+          titLoc.trim().toLowerCase() === gEvent.titulo.trim().toLowerCase() &&
+          horaLoc === gEvent.hora
+        );
+      });
+
+      if (!yaExistePorId && !yaExistePorTituloYHora) {
+        listaLocal.push(gEvent);
+      }
+    });
+
+    resultado[fechaClave] = listaLocal;
+  });
+
+  return resultado;
 }

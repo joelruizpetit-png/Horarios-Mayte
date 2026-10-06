@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase'; 
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { registrarActividad, formatearNombreFamiliar } from '../utils/actividad';
@@ -7,7 +7,11 @@ import {
   sincronizarEventoGoogleCalendar,
   eliminarEventoGoogleCalendar,
   estaGoogleCalendarConectado,
-  conectarGoogleCalendar
+  conectarGoogleCalendar,
+  asegurarTokenGoogleCalendar,
+  obtenerEventosGoogleCalendar,
+  combinarEventosLocalesYGoogle,
+  EventoAgendaGC
 } from '../utils/googleCalendar';
 
 interface Evento {
@@ -18,6 +22,7 @@ interface Evento {
   categoria?: string;
   creador?: string;
   googleCalendarEventId?: string;
+  esGoogleCalendar?: boolean;
 }
 
 const DIAS_SEMANA = [
@@ -87,8 +92,10 @@ export default function CalendarioSemanal({
     googleCalendarEventId: ''
   });
 
-  // Estado de conexión con Google Calendar
+  // Estado de conexión con Google Calendar y eventos leídos
   const [gcalConectado, setGcalConectado] = useState<boolean>(false);
+  const [eventosGoogle, setEventosGoogle] = useState<Record<string, EventoAgendaGC[]>>({});
+  const [cargandoGoogle, setCargandoGoogle] = useState<boolean>(false);
 
   useEffect(() => {
     setGcalConectado(estaGoogleCalendarConectado());
@@ -98,6 +105,7 @@ export default function CalendarioSemanal({
     const token = await conectarGoogleCalendar();
     if (token) {
       setGcalConectado(true);
+      await cargarEventosGoogle(lunesSemana);
       alert("¡Google Calendar conectado con éxito! Tus eventos se sincronizarán con alarmas nativas (30 min y 1 día antes) en tu móvil.");
     }
   };
@@ -176,6 +184,42 @@ export default function CalendarioSemanal({
 
   const lunesSemana = obtenerLunes(fechaReferencia);
 
+  // Combinar eventos de Firestore con eventos sincronizados de Google Calendar
+  const eventosCombinados = useMemo(() => {
+    return combinarEventosLocalesYGoogle(eventos, eventosGoogle);
+  }, [eventos, eventosGoogle]);
+
+  const cargarEventosGoogle = async (baseLunes: Date) => {
+    try {
+      const inicio = new Date(baseLunes);
+      inicio.setHours(0, 0, 0, 0);
+      const fin = new Date(baseLunes);
+      fin.setDate(baseLunes.getDate() + 7);
+      fin.setHours(23, 59, 59, 999);
+
+      setCargandoGoogle(true);
+      const res = await obtenerEventosGoogleCalendar({
+        fechaInicio: inicio,
+        fechaFin: fin
+      });
+
+      if (res.exito) {
+        setEventosGoogle(res.eventos);
+      } else if (res.necesitaReconexion) {
+        setGcalConectado(false);
+      }
+      setGcalConectado(estaGoogleCalendarConectado());
+    } catch (e) {
+      console.warn("No se pudieron cargar eventos de Google Calendar:", e);
+    } finally {
+      setCargandoGoogle(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarEventosGoogle(lunesSemana);
+  }, [lunesSemana.toDateString()]);
+
   // Generar los 7 días de la semana
   const diasDeLaSemana = Array.from({ length: 7 }, (_, i) => {
     const dia = new Date(lunesSemana);
@@ -200,7 +244,7 @@ export default function CalendarioSemanal({
     }
   };
 
-  const abrirModalParaDia = (dia: Date) => {
+  const abrirModalParaDia = async (dia: Date) => {
     setFechaModal(dia);
     const hoyStr = toISODate(dia);
     setFechaInicioRep(hoyStr);
@@ -219,6 +263,10 @@ export default function CalendarioSemanal({
     setCategoriaRepeticion('normal');
     setNuevoEvento({ titulo: "", hora: "", horaFin: "", tipo: "normal" });
     setMostrarModal(true);
+
+    // Asegurar accessToken de Google Calendar
+    const token = await asegurarTokenGoogleCalendar();
+    if (token) setGcalConectado(true);
   };
 
   const guardarNota = async () => {
@@ -331,9 +379,12 @@ export default function CalendarioSemanal({
       });
       if (resGcal?.googleCalendarEventId) {
         eventoAGuardar.googleCalendarEventId = resGcal.googleCalendarEventId;
+      } else if (resGcal?.error) {
+        alert(`⚠️ Google Calendar:\n${resGcal.error}\n\nEl evento se ha guardado localmente en la app.`);
       }
     } catch (errGcal) {
       console.warn("No se pudo sincronizar evento con Google Calendar:", errGcal);
+      alert("⚠️ Error al sincronizar con Google Calendar. El evento se ha guardado localmente en la app.");
     }
 
     const nuevosEventos = {
@@ -353,6 +404,7 @@ export default function CalendarioSemanal({
         descripcion: `Nuevo evento: "${nuevoEvento.titulo.trim()}" (${nuevoEvento.hora || 'Todo el día'}) para el ${fechaFormato}`,
         usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
       });
+      cargarEventosGoogle(lunesSemana);
     } catch (error) {
       console.error("Error al guardar:", error);
       alert("Error al guardar en la nube");
@@ -361,15 +413,16 @@ export default function CalendarioSemanal({
 
   const abrirModalEdicion = (fechaClave: string, nota: Evento | string, index: number) => {
     const esAntigua = typeof nota === 'string';
+    const esGoogle = !esAntigua && Boolean((nota as any).esGoogleCalendar || (nota as any).tipo === 'google');
     setEventoAEditar({
       index,
       fechaClave,
       titulo: esAntigua ? nota : (nota.titulo || ''),
       hora: esAntigua ? '' : (nota.hora || ''),
       horaFin: (!esAntigua && nota.horaFin) ? nota.horaFin : '',
-      tipo: (!esAntigua && nota.tipo) ? nota.tipo : 'normal',
+      tipo: (!esAntigua && nota.tipo) ? nota.tipo : (esGoogle ? 'google' : 'normal'),
       creador: (!esAntigua && (nota as Evento).creador) ? (nota as Evento).creador! : 'J',
-      googleCalendarEventId: (!esAntigua && (nota as Evento).googleCalendarEventId) ? (nota as Evento).googleCalendarEventId : ''
+      googleCalendarEventId: (!esAntigua && (nota as any).googleCalendarEventId) ? (nota as any).googleCalendarEventId : ''
     });
     setMostrarModalEdicion(true);
   };
@@ -381,10 +434,42 @@ export default function CalendarioSemanal({
     }
 
     const fechaClave = eventoAEditar.fechaClave;
-    const notasDelDia = [...(eventos[fechaClave] || [])];
-    if (eventoAEditar.index < 0 || eventoAEditar.index >= notasDelDia.length) return;
+    const listaActual = eventosCombinados[fechaClave] || [];
+    const notaActual = listaActual[eventoAEditar.index];
 
-    const notaActual = notasDelDia[eventoAEditar.index];
+    // Si es un evento exclusivo de Google Calendar
+    if (typeof notaActual === 'object' && (notaActual as any)?.esGoogleCalendar) {
+      const gcalId = (notaActual as any).googleCalendarEventId || eventoAEditar.googleCalendarEventId;
+      if (gcalId) {
+        try {
+          const res = await sincronizarEventoGoogleCalendar({
+            fechaClave,
+            evento: {
+              titulo: eventoAEditar.titulo.trim(),
+              hora: eventoAEditar.hora || "--:--",
+              horaFin: eventoAEditar.horaFin || '',
+              googleCalendarEventId: gcalId
+            },
+            esEdicion: true
+          });
+          if (res?.error) {
+            alert(`⚠️ Error al actualizar en Google Calendar:\n${res.error}`);
+          }
+        } catch (e) {
+          console.error("Error al actualizar evento de Google:", e);
+        }
+      }
+      setMostrarModalEdicion(false);
+      cargarEventosGoogle(lunesSemana);
+      return;
+    }
+
+    const notasDelDia = [...(eventos[fechaClave] || [])];
+    const indexLocal = notasDelDia.findIndex((n) => {
+      if (typeof n === 'string') return n === (typeof notaActual === 'string' ? notaActual : '');
+      return n?.titulo === (typeof notaActual === 'object' ? notaActual?.titulo : '');
+    });
+
     const eventoActualizado: Evento = {
       titulo: eventoAEditar.titulo.trim(),
       hora: eventoAEditar.hora || "--:--",
@@ -403,12 +488,18 @@ export default function CalendarioSemanal({
       });
       if (resGcal?.googleCalendarEventId) {
         eventoActualizado.googleCalendarEventId = resGcal.googleCalendarEventId;
+      } else if (resGcal?.error) {
+        alert(`⚠️ Aviso de Google Calendar:\n${resGcal.error}\n\nEl evento se ha actualizado localmente en la app.`);
       }
     } catch (errGcal) {
       console.warn("No se pudo actualizar evento en Google Calendar:", errGcal);
     }
 
-    notasDelDia[eventoAEditar.index] = eventoActualizado;
+    if (indexLocal >= 0) {
+      notasDelDia[indexLocal] = eventoActualizado;
+    } else {
+      notasDelDia.push(eventoActualizado);
+    }
 
     const nuevosEventos = {
       ...eventos,
@@ -425,6 +516,7 @@ export default function CalendarioSemanal({
         descripcion: `Evento editado: "${eventoAEditar.titulo.trim()}" (${eventoAEditar.hora || 'Todo el día'})`,
         usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
       });
+      cargarEventosGoogle(lunesSemana);
     } catch (error) {
       console.error("Error al actualizar evento:", error);
       alert("Error al actualizar el evento en la nube");
@@ -436,12 +528,26 @@ export default function CalendarioSemanal({
       return;
     }
     const fechaClave = eventoAEditar.fechaClave;
-    const notaAEliminar = (eventos[fechaClave] || [])[eventoAEditar.index];
+    const listaActual = eventosCombinados[fechaClave] || [];
+    const notaAEliminar = listaActual[eventoAEditar.index];
+
+    if (notaAEliminar && typeof notaAEliminar === 'object' && (notaAEliminar as any).esGoogleCalendar) {
+      if ((notaAEliminar as any).googleCalendarEventId) {
+        await eliminarEventoGoogleCalendar((notaAEliminar as any).googleCalendarEventId);
+      }
+      setMostrarModalEdicion(false);
+      cargarEventosGoogle(lunesSemana);
+      return;
+    }
+
     if (notaAEliminar && typeof notaAEliminar === 'object' && (notaAEliminar as Evento).googleCalendarEventId) {
       eliminarEventoGoogleCalendar((notaAEliminar as Evento).googleCalendarEventId).catch(console.error);
     }
 
-    const nuevasNotas = (eventos[fechaClave] || []).filter((_, i) => i !== eventoAEditar.index);
+    const nuevasNotas = (eventos[fechaClave] || []).filter((n) => {
+      if (typeof n === 'string') return n !== (typeof notaAEliminar === 'string' ? notaAEliminar : '');
+      return (n as Evento)?.titulo !== eventoAEditar.titulo;
+    });
     const nuevosEventos = { ...eventos, [fechaClave]: nuevasNotas };
 
     setEventos(nuevosEventos);
@@ -449,6 +555,7 @@ export default function CalendarioSemanal({
 
     try {
       await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+      cargarEventosGoogle(lunesSemana);
     } catch (error) {
       console.error("Error al eliminar evento:", error);
       alert("Error al eliminar el evento en la nube");
@@ -456,20 +563,37 @@ export default function CalendarioSemanal({
   };
 
   const borrarNota = async (fechaClave: string, index: number) => {
+    const listaActual = eventosCombinados[fechaClave] || [];
+    const notaAEliminar = listaActual[index];
+    if (!notaAEliminar) return;
+
+    // Si es un evento exclusivo de Google Calendar
+    if (typeof notaAEliminar === 'object' && (notaAEliminar as any).esGoogleCalendar) {
+      if (!window.confirm("¿Deseas eliminar este evento de tu Google Calendar?")) return;
+      if ((notaAEliminar as any).googleCalendarEventId) {
+        await eliminarEventoGoogleCalendar((notaAEliminar as any).googleCalendarEventId);
+      }
+      cargarEventosGoogle(lunesSemana);
+      return;
+    }
+
     if (!window.confirm("¿Estás seguro de que deseas eliminar este evento?")) {
       return;
     }
-    const notasActuales = eventos[fechaClave] || [];
-    const notaAEliminar = notasActuales[index];
-    if (notaAEliminar && typeof notaAEliminar === 'object' && (notaAEliminar as Evento).googleCalendarEventId) {
+
+    if (typeof notaAEliminar === 'object' && (notaAEliminar as Evento).googleCalendarEventId) {
       eliminarEventoGoogleCalendar((notaAEliminar as Evento).googleCalendarEventId).catch(console.error);
     }
 
-    const nuevasNotas = notasActuales.filter((_, i) => i !== index);
-    const nuevosEventos = { ...eventos, [fechaClave]: nuevasNotas };
+    const notasFirestore = (eventos[fechaClave] || []).filter((n) => {
+      if (typeof n === 'string') return n !== notaAEliminar;
+      return (n as Evento)?.titulo !== (notaAEliminar as Evento)?.titulo;
+    });
+    const nuevosEventos = { ...eventos, [fechaClave]: notasFirestore };
 
     setEventos(nuevosEventos);
     await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
+    cargarEventosGoogle(lunesSemana);
   };
 
   const domingoSemana = diasDeLaSemana[6];
@@ -596,11 +720,11 @@ export default function CalendarioSemanal({
           <span>{gcalConectado ? "🟢" : "🔔"}</span>
           <span style={{ fontWeight: 700, color: gcalConectado ? "#166534" : "#475569" }}>
             {gcalConectado
-              ? "Google Calendar conectado (Alarmas: 30 min y 1 día antes)"
+              ? `Google Calendar conectado (Alarmas: 30 min y 1 día antes)${cargandoGoogle ? ' • Sincronizando...' : ''}`
               : "Google Calendar no sincronizado"}
           </span>
         </div>
-        {!gcalConectado && (
+        {!gcalConectado ? (
           <button
             onClick={manejarConectarGoogle}
             style={{
@@ -617,6 +741,23 @@ export default function CalendarioSemanal({
           >
             Conectar
           </button>
+        ) : (
+          <button
+            onClick={() => cargarEventosGoogle(lunesSemana)}
+            title="Sincronizar eventos de Google Calendar"
+            style={{
+              background: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              padding: '3px 8px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              color: '#334155'
+            }}
+          >
+            {cargandoGoogle ? '⏳' : '🔄 Actualizar'}
+          </button>
         )}
       </div>
 
@@ -626,7 +767,7 @@ export default function CalendarioSemanal({
           const claveDia = dia.toDateString();
           const esHoy = claveDia === hoyStr;
           const esFinDeSemana = dia.getDay() === 0 || dia.getDay() === 6;
-          const notasDelDia = eventos[claveDia] || [];
+          const notasDelDia = eventosCombinados[claveDia] || [];
 
           return (
             <div
@@ -731,18 +872,22 @@ export default function CalendarioSemanal({
                     const horaInicio = esAntigua ? "--:--" : (nota.hora || "--:--");
                     const esDeporte = esEventoDeporte(nota);
                     const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
+                    const esGoogle = !esAntigua && Boolean((nota as any).esGoogleCalendar || (nota as any).tipo === 'google');
                     const horaFin = !esAntigua ? nota.horaFin : "";
-                    // Para eventos de deporte: NO mostrar creador ni 'J' ni 'A'
-                    const creadorNota = esDeporte ? '' : (!esAntigua && (nota as Evento).creador ? (nota as Evento).creador!.toUpperCase() : (esTrabajo ? 'J' : ''));
+                    // Para eventos de deporte o google: sin inicial J/A
+                    const creadorNota = (esDeporte || esGoogle) ? '' : (!esAntigua && (nota as Evento).creador ? (nota as Evento).creador!.toUpperCase() : (esTrabajo ? 'J' : ''));
 
                     let textoHora = horaInicio;
-                    if (esTrabajo && horaFin) {
+                    if ((esTrabajo || esGoogle) && horaFin) {
                       textoHora = `${horaInicio} - ${horaFin}`;
                     }
 
                     let borderColor = '#9ca3af';
                     let bgColor = '#f9fafb';
-                    if (esDeporte) {
+                    if (esGoogle) {
+                      borderColor = '#2563eb';
+                      bgColor = '#eff6ff';
+                    } else if (esDeporte) {
                       borderColor = '#FACC15';
                       bgColor = '#fefce8';
                     } else if (esTrabajo) {
@@ -768,7 +913,7 @@ export default function CalendarioSemanal({
                           transition: 'all 0.15s ease'
                         }}
                         onMouseOver={(e) => {
-                          e.currentTarget.style.backgroundColor = esDeporte ? '#fef9c3' : (esTrabajo ? '#e0f2fe' : '#f3f4f6');
+                          e.currentTarget.style.backgroundColor = esDeporte ? '#fef9c3' : (esTrabajo ? '#e0f2fe' : (esGoogle ? '#dbeafe' : '#f3f4f6'));
                         }}
                         onMouseOut={(e) => {
                           e.currentTarget.style.backgroundColor = bgColor;
@@ -776,7 +921,19 @@ export default function CalendarioSemanal({
                       >
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
-                            {esDeporte ? (
+                            {esGoogle ? (
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: 800,
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                                backgroundColor: '#2563eb',
+                                color: '#ffffff',
+                                letterSpacing: '0.4px'
+                              }}>
+                                📅 Google
+                              </span>
+                            ) : esDeporte ? (
                               <span
                                 title="Evento deportivo"
                                 style={{
@@ -807,9 +964,9 @@ export default function CalendarioSemanal({
                             <span style={{
                               fontSize: '11px',
                               fontWeight: 700,
-                              color: esDeporte ? '#a16207' : (esTrabajo ? '#0070f3' : '#4b5563')
+                              color: esGoogle ? '#1d4ed8' : (esDeporte ? '#a16207' : (esTrabajo ? '#0070f3' : '#4b5563'))
                             }}>
-                              {esDeporte ? `🏆 ${textoHora}` : (esTrabajo ? `💼 ${textoHora}` : `🕒 ${textoHora}`)}
+                              {esGoogle ? `📅 ${textoHora}` : (esDeporte ? `🏆 ${textoHora}` : (esTrabajo ? `💼 ${textoHora}` : `🕒 ${textoHora}`))}
                             </span>
                           </div>
                           <span style={{
@@ -826,7 +983,7 @@ export default function CalendarioSemanal({
                             e.stopPropagation();
                             borrarNota(claveDia, i);
                           }}
-                          title="Eliminar evento"
+                          title={esGoogle ? "Eliminar de Google Calendar" : "Eliminar evento"}
                           aria-label="Borrar nota"
                           style={{
                             background: 'none',
