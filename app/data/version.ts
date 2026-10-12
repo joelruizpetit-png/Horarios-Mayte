@@ -1,6 +1,6 @@
 // app/data/version.ts
 
-export const APP_VERSION = "1.4.0";
+export const APP_VERSION = "1.4.1";
 
 export interface ItemNovedadVersion {
   icono: string;
@@ -23,6 +23,14 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
   lema: "OS Familiar de Ana, Joel y Alma",
   fecha: "Octubre 2026",
   items: [
+    {
+      icono: "📅",
+      titulo: "Desglose agrupado por día en Horas Trabajadas",
+      descripcion: "El resumen de turnos ahora agrupa todos los turnos del mismo día en una sola tarjeta. El encabezado muestra la fecha y el total de horas del día, y el cuerpo lista cada turno con su título, horario y horas individuales.",
+      badge: "Mejora UX",
+      badgeColor: "#166534",
+      badgeBg: "#dcfce7"
+    },
     {
       icono: "⏱️",
       titulo: "Contador de Horas Trabajadas",
@@ -65,8 +73,8 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
     },
     {
       icono: "🚀",
-      titulo: "¡Bienvenido a AJA v1.4.0!",
-      descripcion: "Tu sistema operativo familiar (Ana, Joel y Alma) se actualiza con el Contador de Horas Trabajadas semanal, identificación visual exclusiva de Condis en los turnos de Joel, conexión permanente a Google Calendar y mejoras continuas.",
+      titulo: "¡Bienvenido a AJA v1.4.1!",
+      descripcion: "Tu sistema operativo familiar (Ana, Joel y Alma) se actualiza con el desglose diario agrupado de turnos, el Contador de Horas Trabajadas semanal, identificación visual exclusiva de Condis en los turnos de Joel, conexión permanente a Google Calendar y mejoras continuas.",
       badge: "Nueva Versión",
       badgeColor: "#0047b3",
       badgeBg: "#eff6ff"

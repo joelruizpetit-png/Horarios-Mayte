@@ -182,6 +182,34 @@ function determinarCreadorTurno(evento: unknown): 'J' | 'A' {
   return 'J';
 }
 
+// ─── Agrupación por día ───────────────────────────────────────────────────────
+interface GrupoDia {
+  fechaKey: string;          // YYYY-MM-DD (clave de orden)
+  etiqueta: string;          // ej. "Miércoles 14 Oct"
+  totalHoras: number;
+  turnos: TurnoDetallado[];
+}
+
+function agruparPorDia(lista: TurnoDetallado[]): GrupoDia[] {
+  const mapa = new Map<string, GrupoDia>();
+  for (const t of lista) {
+    const key = t.fechaISO;
+    if (!mapa.has(key)) {
+      mapa.set(key, {
+        fechaKey: key,
+        etiqueta: `${t.diaSemana} ${t.diaNumero} ${t.mesNombre}`,
+        totalHoras: 0,
+        turnos: []
+      });
+    }
+    const g = mapa.get(key)!;
+    g.turnos.push(t);
+    g.totalHoras = Math.round((g.totalHoras + t.horas) * 100) / 100;
+  }
+  // Ordenar cronológicamente
+  return Array.from(mapa.values()).sort((a, b) => a.fechaKey.localeCompare(b.fechaKey));
+}
+
 export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorHorasTrabajadasProps) {
   const [fechaReferencia, setFechaReferencia] = useState<Date>(new Date());
   const [eventos, setEventos] = useState<Record<string, unknown[]>>({});
@@ -604,7 +632,7 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
           </div>
         </div>
 
-        {/* DESGLOSE DE TURNOS DE JOEL */}
+        {/* DESGLOSE DE TURNOS DE JOEL - AGRUPADO POR DÍA */}
         <div style={{ padding: '14px 16px' }}>
           <div style={{ fontSize: '12px', fontWeight: 800, color: '#334155', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
             Desglose de turnos ({turnosJoel.length})
@@ -624,54 +652,81 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
               No hay turnos de trabajo registrados para Joel en esta semana.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {turnosJoel.map((t) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {agruparPorDia(turnosJoel).map((grupo) => (
                 <div
-                  key={t.id}
+                  key={grupo.fechaKey}
                   style={{
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '12px',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {/* Encabezado del día */}
+                  <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '10px 12px',
-                    backgroundColor: '#eff6ff',
-                    border: '1px solid #bfdbfe',
-                    borderLeft: '4px solid #0047b3',
-                    borderRadius: '10px',
-                    gap: '8px'
-                  }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    padding: '9px 12px',
+                    backgroundColor: '#dbeafe',
+                    borderBottom: grupo.turnos.length > 0 ? '1px solid #bfdbfe' : 'none'
+                  }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '12px', fontWeight: 800, color: '#0047b3' }}>
-                        {t.diaSemana} {t.diaNumero} {t.mesNombre}
+                        {grupo.etiqueta}
                       </span>
-                      {t.esCondis && (
-                        <img
-                          src="/condis.jpg"
-                          alt="Condis"
-                          style={{ maxHeight: '16px', width: 'auto', objectFit: 'contain' }}
-                        />
+                      {grupo.turnos.some(t => t.esCondis) && (
+                        <img src="/condis.jpg" alt="Condis" style={{ maxHeight: '14px', width: 'auto', objectFit: 'contain', borderRadius: '3px', backgroundColor: '#fff', padding: '1px 3px' }} />
                       )}
                     </div>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                      {t.titulo}
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>
-                      🕒 {t.horaInicio} - {t.horaFin}
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: 900,
+                      color: '#0047b3',
+                      backgroundColor: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      padding: '3px 9px',
+                      borderRadius: '20px'
+                    }}>
+                      +{grupo.totalHoras} h
                     </span>
                   </div>
 
-                  <div style={{
-                    backgroundColor: '#0047b3',
-                    color: '#ffffff',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: 800,
-                    flexShrink: 0,
-                    textAlign: 'center'
-                  }}>
-                    +{t.horas} h
+                  {/* Filas de turnos de ese día */}
+                  <div style={{ backgroundColor: '#eff6ff' }}>
+                    {grupo.turnos.map((t, idx) => (
+                      <div
+                        key={t.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '8px 12px',
+                          borderTop: idx > 0 ? '1px solid #bfdbfe' : 'none',
+                          gap: '8px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {t.titulo}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>
+                            🕒 {t.horaInicio} - {t.horaFin}
+                          </span>
+                        </div>
+                        <div style={{
+                          backgroundColor: '#0047b3',
+                          color: '#ffffff',
+                          padding: '4px 9px',
+                          borderRadius: '7px',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          flexShrink: 0
+                        }}>
+                          +{t.horas} h
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -773,7 +828,7 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
           </div>
         </div>
 
-        {/* DESGLOSE DE TURNOS DE ANA */}
+        {/* DESGLOSE DE TURNOS DE ANA - AGRUPADO POR DÍA */}
         <div style={{ padding: '14px 16px' }}>
           <div style={{ fontSize: '12px', fontWeight: 800, color: '#334155', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
             Desglose de turnos ({turnosAna.length})
@@ -793,45 +848,76 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
               No hay turnos de trabajo registrados para Ana en esta semana.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {turnosAna.map((t) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {agruparPorDia(turnosAna).map((grupo) => (
                 <div
-                  key={t.id}
+                  key={grupo.fechaKey}
                   style={{
+                    border: '1px solid #fecdd3',
+                    borderRadius: '12px',
+                    overflow: 'hidden'
+                  }}
+                >
+                  {/* Encabezado del día */}
+                  <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '10px 12px',
-                    backgroundColor: '#fff1f2',
-                    border: '1px solid #fecdd3',
-                    borderLeft: '4px solid #dc2626',
-                    borderRadius: '10px',
-                    gap: '8px'
-                  }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    padding: '9px 12px',
+                    backgroundColor: '#fee2e2',
+                    borderBottom: grupo.turnos.length > 0 ? '1px solid #fecdd3' : 'none'
+                  }}>
                     <span style={{ fontSize: '12px', fontWeight: 800, color: '#b91c1c' }}>
-                      {t.diaSemana} {t.diaNumero} {t.mesNombre}
+                      {grupo.etiqueta}
                     </span>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                      {t.titulo}
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>
-                      🕒 {t.horaInicio} - {t.horaFin}
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: 900,
+                      color: '#b91c1c',
+                      backgroundColor: '#fff1f2',
+                      border: '1px solid #fecdd3',
+                      padding: '3px 9px',
+                      borderRadius: '20px'
+                    }}>
+                      +{grupo.totalHoras} h
                     </span>
                   </div>
 
-                  <div style={{
-                    backgroundColor: '#dc2626',
-                    color: '#ffffff',
-                    padding: '6px 10px',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: 800,
-                    flexShrink: 0,
-                    textAlign: 'center'
-                  }}>
-                    +{t.horas} h
+                  {/* Filas de turnos de ese día */}
+                  <div style={{ backgroundColor: '#fff1f2' }}>
+                    {grupo.turnos.map((t, idx) => (
+                      <div
+                        key={t.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '8px 12px',
+                          borderTop: idx > 0 ? '1px solid #fecdd3' : 'none',
+                          gap: '8px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {t.titulo}
+                          </span>
+                          <span style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>
+                            🕒 {t.horaInicio} - {t.horaFin}
+                          </span>
+                        </div>
+                        <div style={{
+                          backgroundColor: '#dc2626',
+                          color: '#ffffff',
+                          padding: '4px 9px',
+                          borderRadius: '7px',
+                          fontSize: '12px',
+                          fontWeight: 800,
+                          flexShrink: 0
+                        }}>
+                          +{t.horas} h
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
