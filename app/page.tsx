@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import Calendario from './components/Calendario';
+import ContadorHorasTrabajadas from './components/ContadorHorasTrabajadas';
 import CalendarioSemanal from './components/CalendarioSemanal';
 import HeaderSofascore from './components/HeaderSofascore';
 import CalendarioDeportes from './components/CalendarioDeportes';
@@ -34,7 +35,7 @@ const CORREOS_AUTORIZADOS = [
 export default function Home() {
   const [usuario, setUsuario] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [seccionPrincipal, setSeccionPrincipal] = useState<'planificador' | 'finanzas' | 'lista-compra'>('planificador');
+  const [seccionPrincipal, setSeccionPrincipal] = useState<'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas'>('planificador');
   const [menuLateralAbierto, setMenuLateralAbierto] = useState<boolean>(false);
   const [modalVersionAbierto, setModalVersionAbierto] = useState<boolean>(false);
   const [tabActiva, setTabActiva] = useState<string>('general');
@@ -207,7 +208,10 @@ export default function Home() {
               usuario={usuario} 
               onIrAFinanzas={() => setSeccionPrincipal('finanzas')} 
             />
+          ) : seccionPrincipal === 'horas-trabajadas' ? (
+            <ContadorHorasTrabajadas usuario={usuario} onIrAPlanificador={() => setSeccionPrincipal('planificador')} />
           ) : (
+
             <>
               {tabActiva === 'general' && (
                 <Calendario 

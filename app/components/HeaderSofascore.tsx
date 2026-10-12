@@ -18,8 +18,8 @@ interface HeaderSofascoreProps {
   onTabChange: (tabId: string) => void;
   tabs?: TabItem[];
   onAbrirMenuLateral?: () => void;
-  seccionActiva?: 'planificador' | 'finanzas' | 'lista-compra';
-  onCambiarSeccion?: (seccion: 'planificador' | 'finanzas' | 'lista-compra') => void;
+  seccionActiva?: 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas';
+  onCambiarSeccion?: (seccion: 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas') => void;
 }
 
 const DEFAULT_TABS: TabItem[] = [
@@ -282,6 +282,54 @@ export default function HeaderSofascore({
                 onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#eff6ff')}
               >
                 <span>📅 Ver Agenda</span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : seccionActiva === 'horas-trabajadas' ? (
+        <div style={{
+          backgroundColor: '#ffffff',
+          borderBottom: '1px solid #e5e7eb',
+          display: 'flex',
+          justifyContent: 'center',
+          width: '100%',
+          padding: '10px 16px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '500px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}>⏱️</span>
+              <div>
+                <span style={{ fontSize: '14px', fontWeight: 800, color: '#166534' }}>Horas Trabajadas</span>
+                <span style={{ fontSize: '11px', color: '#64748b', display: 'block', fontWeight: 500 }}>Resumen semanal</span>
+              </div>
+            </div>
+            {onCambiarSeccion && (
+              <button
+                onClick={() => onCambiarSeccion('planificador')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  backgroundColor: '#eff6ff',
+                  color: '#0047b3',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#dbeafe')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#eff6ff')}
+              >
+                <span>← Volver</span>
               </button>
             )}
           </div>

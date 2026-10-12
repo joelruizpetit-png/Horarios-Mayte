@@ -6,8 +6,8 @@ import { APP_VERSION } from '../data/version';
 interface MenuLateralProps {
   abierto: boolean;
   onCerrar: () => void;
-  seccionActiva: 'planificador' | 'finanzas' | 'lista-compra';
-  onCambiarSeccion: (seccion: 'planificador' | 'finanzas' | 'lista-compra') => void;
+  seccionActiva: 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas';
+  onCambiarSeccion: (seccion: 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas') => void;
   usuario: {
     displayName?: string | null;
     email?: string | null;
@@ -391,6 +391,72 @@ export default function MenuLateral({
                 height: '8px',
                 borderRadius: '50%',
                 backgroundColor: '#0284c7',
+                flexShrink: 0
+              }} />
+            )}
+          </button>
+
+          {/* OPCIÓN 4: HORAS TRABAJADAS */}
+          <button
+            onClick={() => {
+              onCambiarSeccion('horas-trabajadas');
+              onCerrar();
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px 14px',
+              borderRadius: '12px',
+              border: seccionActiva === 'horas-trabajadas' ? '2px solid #c7d2fe' : '1px solid #f1f5f9',
+              backgroundColor: seccionActiva === 'horas-trabajadas' ? '#eef2ff' : '#ffffff',
+              color: seccionActiva === 'horas-trabajadas' ? '#4338ca' : '#334155',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'all 0.15s ease',
+              width: '100%',
+              boxShadow: seccionActiva === 'horas-trabajadas' ? '0 2px 8px rgba(67, 56, 202, 0.08)' : 'none'
+            }}
+            onMouseOver={(e) => {
+              if (seccionActiva !== 'horas-trabajadas') {
+                e.currentTarget.style.backgroundColor = '#f8fafc';
+                e.currentTarget.style.borderColor = '#e2e8f0';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (seccionActiva !== 'horas-trabajadas') {
+                e.currentTarget.style.backgroundColor = '#ffffff';
+                e.currentTarget.style.borderColor = '#f1f5f9';
+              }
+            }}
+          >
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: seccionActiva === 'horas-trabajadas' ? '#e0e7ff' : '#f1f5f9',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '18px',
+              flexShrink: 0
+            }}>
+              ⏱️
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '14px', fontWeight: 800 }}>
+                Horas Trabajadas
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500, marginTop: '2px' }}>
+                Cómputo Semanal de Joel y Ana
+              </div>
+            </div>
+            {seccionActiva === 'horas-trabajadas' && (
+              <span style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: '#4338ca',
                 flexShrink: 0
               }} />
             )}
