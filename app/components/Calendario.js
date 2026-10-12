@@ -65,6 +65,25 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
 
   useEffect(() => {
     setGcalConectado(estaGoogleCalendarConectado());
+
+    const handleAuthChange = () => {
+      setGcalConectado(estaGoogleCalendarConectado());
+    };
+    const handleVisibilidad = () => {
+      if (document.visibilityState === 'visible') {
+        setGcalConectado(estaGoogleCalendarConectado());
+      }
+    };
+
+    window.addEventListener('google-calendar-auth-changed', handleAuthChange);
+    window.addEventListener('focus', handleAuthChange);
+    document.addEventListener('visibilitychange', handleVisibilidad);
+
+    return () => {
+      window.removeEventListener('google-calendar-auth-changed', handleAuthChange);
+      window.removeEventListener('focus', handleAuthChange);
+      document.removeEventListener('visibilitychange', handleVisibilidad);
+    };
   }, []);
 
   // 2. LECTURA Y SINCRONIZACIÓN (Google Calendar -> App):
@@ -189,6 +208,40 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
       return true;
     }
     return false;
+  };
+
+  // Comprobar si un evento es exclusivamente un turno de trabajo de Joel para mostrar el logo de Condis
+  const esTurnoTrabajoCondisJoel = (e) => {
+    if (!e) return false;
+    const esStr = typeof e === 'string';
+    const titulo = (esStr ? e : (e.titulo || '')).trim();
+    const tipo = !esStr ? (e.tipo || '') : '';
+    const categoria = !esStr ? (e.categoria || '') : '';
+    const creador = !esStr ? ((e.creador || '').toUpperCase().trim()) : '';
+    const esDeporte = esEventoDeporte(e);
+
+    if (esDeporte) return false;
+
+    // REGLA DE EXCLUSIVIDAD: Si fue creado por o está asignado a Ana ("A"), NO mostrar bajo ninguna circunstancia
+    if (creador === 'A' || creador === 'ANA' || creador.includes('ANA')) {
+      return false;
+    }
+
+    // Condición a: El evento es de tipo trabajo (título contiene "Turno", "Trabajo", "Condis" o categoría/tipo trabajo)
+    const titLower = titulo.toLowerCase();
+    const contienePalabraTrabajo = /turno|trabajo|condis/i.test(titLower);
+    const esTipoOCategoriaTrabajo =
+      tipo === 'trabajo' ||
+      tipo === 'job' ||
+      (typeof categoria === 'string' && (categoria.toLowerCase() === 'trabajo' || categoria.toLowerCase() === 'laboral'));
+    const esTrabajo = esTipoOCategoriaTrabajo || contienePalabraTrabajo;
+
+    if (!esTrabajo) return false;
+
+    // Condición b: Creado por o pertenece al usuario principal (Joel / "J")
+    const perteneceAJoel = creador === 'J' || creador === 'JOEL' || creador === '';
+
+    return perteneceAJoel;
   };
 
   useEffect(() => {
@@ -743,6 +796,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                 const esDeporte = esEventoDeporte(nota);
                 const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
                 const esGoogle = !esAntigua && (nota.esGoogleCalendar || nota.tipo === 'google');
+                const esCondis = esTurnoTrabajoCondisJoel(nota);
                 // Para eventos de deporte o google: tratamiento específico
                 const creador = (esDeporte || esGoogle) ? '' : (!esAntigua && nota.creador ? nota.creador.toUpperCase() : (esTrabajo ? 'J' : ''));
                 
@@ -839,17 +893,27 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                         {titulo}
                       </span>
                     </div>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        borrarNota(index);
-                      }}
-                      style={{ marginLeft: "10px", color: "#dc2626", border: "none", background: "none", cursor: "pointer", fontSize: "16px", padding: "4px" }}
-                      title={esGoogle ? "Eliminar de Google Calendar" : "Eliminar evento"}
-                      aria-label="Borrar nota"
-                    >
-                      🗑️
-                    </button>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "auto" }}>
+                      {esCondis && (
+                        <img 
+                          src="/condis.jpg" 
+                          alt="Condis" 
+                          style={{ maxHeight: "24px", width: "auto", objectFit: "contain", display: "block" }} 
+                        />
+                      )}
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          borrarNota(index);
+                        }}
+                        style={{ marginLeft: "4px", color: "#dc2626", border: "none", background: "none", cursor: "pointer", fontSize: "16px", padding: "4px" }}
+                        title={esGoogle ? "Eliminar de Google Calendar" : "Eliminar evento"}
+                        aria-label="Borrar nota"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </li>
                 );
               })}

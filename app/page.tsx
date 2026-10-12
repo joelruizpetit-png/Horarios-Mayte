@@ -19,7 +19,11 @@ import {
   signInWithPopup,
   User
 } from 'firebase/auth';
-import { guardarTokenGoogleCalendar, limpiarTokenGoogleCalendar } from './utils/googleCalendar';
+import {
+  guardarTokenGoogleCalendar,
+  limpiarTokenGoogleCalendar,
+  sincronizarTokensDesdeFirestore
+} from './utils/googleCalendar';
 import { sincronizarMenuOctubreFirestore } from './data/menuOctubre2026';
 
 const CORREOS_AUTORIZADOS = [
@@ -62,6 +66,11 @@ export default function Home() {
             }
           });
         }
+
+        // Sincronizar tokens persistentes de Google Calendar desde Firestore si faltan en localStorage
+        sincronizarTokensDesdeFirestore().catch((err) => {
+          console.warn("No se pudieron sincronizar tokens de Calendar desde Firestore:", err);
+        });
       }
       setUsuario(user);
       setLoading(false);
@@ -92,11 +101,26 @@ export default function Home() {
         return;
       }
 
-      // Guardar el token de Google Calendar para sincronización automática y alarmas
+      // Guardar de forma persistente el token de acceso y el refresh token para Google Calendar
       const credential = GoogleAuthProvider.credentialFromResult(result);
       const token = credential?.accessToken;
+
+      const rawResponse = (result as unknown as {
+        _tokenResponse?: {
+          refreshToken?: string;
+          oauthRefreshToken?: string;
+          expiresIn?: number;
+        };
+      })._tokenResponse;
+
+      const refreshToken =
+        rawResponse?.refreshToken ||
+        rawResponse?.oauthRefreshToken ||
+        (credential as unknown as { refreshToken?: string })?.refreshToken ||
+        result.user?.refreshToken;
+
       if (token) {
-        guardarTokenGoogleCalendar(token);
+        await guardarTokenGoogleCalendar(token, refreshToken, rawResponse?.expiresIn);
       }
     } catch (err: unknown) {
       console.error(err);

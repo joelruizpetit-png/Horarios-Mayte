@@ -1,6 +1,6 @@
 // app/data/version.ts
 
-export const APP_VERSION = "1.3.1";
+export const APP_VERSION = "1.3.3";
 
 export interface ItemNovedadVersion {
   icono: string;
@@ -24,6 +24,22 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
   fecha: "Octubre 2026",
   items: [
     {
+      icono: "🛒",
+      titulo: "Logo de Condis en turnos de trabajo de Joel",
+      descripcion: "Visualización personalizada del logo oficial de Condis en las tarjetas de eventos de trabajo creados por el usuario principal (Joel / 'J'). Exclusivo para sus turnos, manteniéndose oculto en eventos personales o creados por Ana.",
+      badge: "Turnos Condis",
+      badgeColor: "#dc2626",
+      badgeBg: "#fef2f2"
+    },
+    {
+      icono: "🔄",
+      titulo: "Conexión permanente con Google Calendar",
+      descripcion: "Se acabó la desconexión por inactividad. La conexión con Google Calendar ahora es ininterrumpida y permanente: el token de acceso se renueva de forma automática y transparente en segundo plano (Silent Refresh) mediante refresh token, sin requerir reconectar manualmente.",
+      badge: "Permanente",
+      badgeColor: "#059669",
+      badgeBg: "#ecfdf5"
+    },
+    {
       icono: "⏰",
       titulo: "Sincronización horaria exacta con Google Calendar",
       descripcion: "Ajuste y fijación de zona horaria oficial (Europe/Madrid) al crear, editar y consultar eventos con la API de Google Calendar. Se resuelven desajustes de horas en móviles y tarjetas de la Agenda.",
@@ -41,8 +57,8 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
     },
     {
       icono: "🚀",
-      titulo: "¡Bienvenido a AJA v1.3.1!",
-      descripcion: "Tu sistema operativo familiar (Ana, Joel y Alma) se actualiza con corrección de sincronización horaria en Google Calendar, menú escolar de Alma y mejoras generales.",
+      titulo: "¡Bienvenido a AJA v1.3.3!",
+      descripcion: "Tu sistema operativo familiar (Ana, Joel y Alma) se actualiza con identificación visual exclusiva de Condis en los turnos de Joel, conexión permanente a Google Calendar y mejoras continuas.",
       badge: "Nueva Versión",
       badgeColor: "#0047b3",
       badgeBg: "#eff6ff"

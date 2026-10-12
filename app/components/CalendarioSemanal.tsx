@@ -16,7 +16,7 @@ import {
 
 interface Evento {
   titulo: string;
-  hora: string;
+  hora?: string;
   horaFin?: string;
   tipo?: 'normal' | 'trabajo' | string;
   categoria?: string;
@@ -99,6 +99,25 @@ export default function CalendarioSemanal({
 
   useEffect(() => {
     setGcalConectado(estaGoogleCalendarConectado());
+
+    const handleAuthChange = () => {
+      setGcalConectado(estaGoogleCalendarConectado());
+    };
+    const handleVisibilidad = () => {
+      if (document.visibilityState === 'visible') {
+        setGcalConectado(estaGoogleCalendarConectado());
+      }
+    };
+
+    window.addEventListener('google-calendar-auth-changed', handleAuthChange);
+    window.addEventListener('focus', handleAuthChange);
+    document.addEventListener('visibilitychange', handleVisibilidad);
+
+    return () => {
+      window.removeEventListener('google-calendar-auth-changed', handleAuthChange);
+      window.removeEventListener('focus', handleAuthChange);
+      document.removeEventListener('visibilitychange', handleVisibilidad);
+    };
   }, []);
 
   const manejarConectarGoogle = async () => {
@@ -143,7 +162,7 @@ export default function CalendarioSemanal({
   };
 
   // Identificar si un evento proviene de la Pestaña Deportes
-  const esEventoDeporte = (e: Evento | string | null | undefined): boolean => {
+  const esEventoDeporte = (e: Evento | EventoAgendaGC | string | null | undefined): boolean => {
     if (!e) return false;
     if (typeof e === 'string') {
       return e.startsWith('⚽') || e.startsWith('🏎️') || e.startsWith('⏱️');
@@ -159,6 +178,41 @@ export default function CalendarioSemanal({
       return true;
     }
     return false;
+  };
+
+  // Comprobar si un evento es exclusivamente un turno de trabajo de Joel para mostrar el logo de Condis
+  const esTurnoTrabajoCondisJoel = (e: Evento | EventoAgendaGC | string | null | undefined): boolean => {
+    if (!e) return false;
+    const esStr = typeof e === 'string';
+    const titulo = (esStr ? e : (e.titulo || '')).trim();
+    const tipo = !esStr ? (e.tipo || '') : '';
+    const categoria = !esStr ? (e.categoria || '') : '';
+    const creador = !esStr ? ((e.creador || '').toUpperCase().trim()) : '';
+    const esDeporte = esEventoDeporte(e);
+
+    // No mostrar en eventos deportivos
+    if (esDeporte) return false;
+
+    // REGLA DE EXCLUSIVIDAD: Si fue creado por o está asignado a Ana ("A"), NO mostrar bajo ninguna circunstancia
+    if (creador === 'A' || creador === 'ANA' || creador.includes('ANA')) {
+      return false;
+    }
+
+    // Condición a: El evento es de tipo trabajo (título contiene "Turno", "Trabajo", "Condis" o categoría/tipo trabajo)
+    const titLower = titulo.toLowerCase();
+    const contienePalabraTrabajo = /turno|trabajo|condis/i.test(titLower);
+    const esTipoOCategoriaTrabajo =
+      tipo === 'trabajo' ||
+      tipo === 'job' ||
+      (typeof categoria === 'string' && (categoria.toLowerCase() === 'trabajo' || categoria.toLowerCase() === 'laboral'));
+    const esTrabajo = esTipoOCategoriaTrabajo || contienePalabraTrabajo;
+
+    if (!esTrabajo) return false;
+
+    // Condición b: Creado por o pertenece al usuario principal (Joel / "J")
+    const perteneceAJoel = creador === 'J' || creador === 'JOEL' || creador === '';
+
+    return perteneceAJoel;
   };
 
   // Conexión en tiempo real con Firestore
@@ -467,7 +521,8 @@ export default function CalendarioSemanal({
     const notasDelDia = [...(eventos[fechaClave] || [])];
     const indexLocal = notasDelDia.findIndex((n) => {
       if (typeof n === 'string') return n === (typeof notaActual === 'string' ? notaActual : '');
-      return n?.titulo === (typeof notaActual === 'object' ? notaActual?.titulo : '');
+      const tituloNotaActual = typeof notaActual === 'object' && notaActual !== null ? (notaActual as Evento).titulo : '';
+      return n?.titulo === tituloNotaActual;
     });
 
     const eventoActualizado: Evento = {
@@ -873,6 +928,7 @@ export default function CalendarioSemanal({
                     const esDeporte = esEventoDeporte(nota);
                     const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
                     const esGoogle = !esAntigua && Boolean((nota as any).esGoogleCalendar || (nota as any).tipo === 'google');
+                    const esCondis = esTurnoTrabajoCondisJoel(nota);
                     const horaFin = !esAntigua ? nota.horaFin : "";
                     // Para eventos de deporte o google: sin inicial J/A
                     const creadorNota = (esDeporte || esGoogle) ? '' : (!esAntigua && (nota as Evento).creador ? (nota as Evento).creador!.toUpperCase() : (esTrabajo ? 'J' : ''));
@@ -978,25 +1034,39 @@ export default function CalendarioSemanal({
                           </span>
                         </div>
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            borrarNota(claveDia, i);
-                          }}
-                          title={esGoogle ? "Eliminar de Google Calendar" : "Eliminar evento"}
-                          aria-label="Borrar nota"
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#dc2626',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            padding: '4px',
-                            lineHeight: 1
-                          }}
-                        >
-                          🗑️
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '8px' }}>
+                          {esCondis && (
+                            <img
+                              src="/condis.jpg"
+                              alt="Logo Condis"
+                              style={{
+                                maxHeight: '24px',
+                                width: 'auto',
+                                objectFit: 'contain',
+                                display: 'block'
+                              }}
+                            />
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              borrarNota(claveDia, i);
+                            }}
+                            title={esGoogle ? "Eliminar de Google Calendar" : "Eliminar evento"}
+                            aria-label="Borrar nota"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#dc2626',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              padding: '4px',
+                              lineHeight: 1
+                            }}
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

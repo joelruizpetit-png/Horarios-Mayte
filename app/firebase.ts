@@ -21,4 +21,8 @@ export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.e
 
 export const googleCalendarProvider = new GoogleAuthProvider();
 googleCalendarProvider.addScope(GOOGLE_CALENDAR_SCOPE);
-googleCalendarProvider.setCustomParameters({ prompt: "select_account" });
+googleCalendarProvider.setCustomParameters({
+  access_type: "offline",
+  prompt: "consent"
+});
+
