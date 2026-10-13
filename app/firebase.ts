@@ -19,10 +19,31 @@ export const auth = getAuth(app);
 // Alcance de Google Calendar API para sincronización de eventos y alertas/alarmas nativas
 export const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
+/**
+ * Provider estático para compatibilidad (se usa como referencia de scopes).
+ * Para iniciar sesión, usar crearGoogleCalendarProvider() que ajusta el prompt dinámicamente.
+ */
 export const googleCalendarProvider = new GoogleAuthProvider();
 googleCalendarProvider.addScope(GOOGLE_CALENDAR_SCOPE);
 googleCalendarProvider.setCustomParameters({
   access_type: "offline",
-  prompt: "consent"
+  prompt: "select_account"
 });
+
+/**
+ * Crea un GoogleAuthProvider dinámico:
+ * - Si `forceConsent` es true (primera vez sin refresh_token), fuerza `prompt: 'consent'`
+ *   para garantizar que Google devuelva un refresh_token.
+ * - En caso contrario, usa `prompt: 'select_account'` para evitar la pantalla de
+ *   advertencia de app no verificada en inicios de sesión recurrentes.
+ */
+export function crearGoogleCalendarProvider(forceConsent: boolean): GoogleAuthProvider {
+  const provider = new GoogleAuthProvider();
+  provider.addScope(GOOGLE_CALENDAR_SCOPE);
+  provider.setCustomParameters({
+    access_type: "offline",
+    prompt: forceConsent ? "consent" : "select_account"
+  });
+  return provider;
+}
 

@@ -1,6 +1,6 @@
 // app/data/version.ts
 
-export const APP_VERSION = "1.4.1";
+export const APP_VERSION = "1.4.2";
 
 export interface ItemNovedadVersion {
   icono: string;
@@ -23,6 +23,22 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
   lema: "OS Familiar de Ana, Joel y Alma",
   fecha: "Octubre 2026",
   items: [
+    {
+      icono: "🔐",
+      titulo: "Autenticación Google Calendar: sin pantalla de advertencia",
+      descripcion: "Corrección del flujo OAuth: el consentimiento explícito ('consent') solo se solicita la primera vez. En sesiones posteriores se reutiliza el refresh_token guardado (Firestore + localStorage), eliminando la pantalla de advertencia de app no verificada y la reconexion manual.",
+      badge: "Fix Auth",
+      badgeColor: "#0047b3",
+      badgeBg: "#eff6ff"
+    },
+    {
+      icono: "⚡",
+      titulo: "Silent Refresh mejorado con expires_at",
+      descripcion: "El token de acceso ahora usa un timestamp absoluto de expiración (expires_at) en lugar de un offset fijo de 50 minutos. La renovación silenciosa se activa con 5 minutos de margen antes del vencimiento real, evitando errores 401/403 en las llamadas a la API de Calendar.",
+      badge: "Mejora",
+      badgeColor: "#059669",
+      badgeBg: "#ecfdf5"
+    },
     {
       icono: "📅",
       titulo: "Desglose agrupado por día en Horas Trabajadas",
@@ -73,8 +89,8 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
     },
     {
       icono: "🚀",
-      titulo: "¡Bienvenido a AJA v1.4.1!",
-      descripcion: "Tu sistema operativo familiar (Ana, Joel y Alma) se actualiza con el desglose diario agrupado de turnos, el Contador de Horas Trabajadas semanal, identificación visual exclusiva de Condis en los turnos de Joel, conexión permanente a Google Calendar y mejoras continuas.",
+      titulo: "¡Bienvenido a AJA v1.4.2!",
+      descripcion: "Flujo de autenticación Google Calendar corregido: refresh_token persistente, renovación silenciosa con margen preciso y eliminación de la pantalla de advertencia en reconexiones. También incluye el desglose diario de turnos, el Contador de Horas Trabajadas y el logo de Condis.",
       badge: "Nueva Versión",
       badgeColor: "#0047b3",
       badgeBg: "#eff6ff"

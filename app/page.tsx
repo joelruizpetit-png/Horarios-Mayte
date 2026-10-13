@@ -11,7 +11,7 @@ import FinanzasFamiliares from './components/FinanzasFamiliares';
 import ListaCompra from './components/ListaCompra';
 import ModalNovedades from './components/ModalNovedades';
 import ModalVersion from './components/ModalVersion';
-import { auth, db, googleCalendarProvider } from './firebase';
+import { auth, db, crearGoogleCalendarProvider } from './firebase';
 import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
@@ -93,7 +93,13 @@ export default function Home() {
   const iniciarSesionConGoogle = async () => {
     setError("");
     try {
-      const result = await signInWithPopup(auth, googleCalendarProvider);
+      // Usar provider dinámico: solo forzar 'consent' si no hay refresh_token ya guardado.
+      // Esto evita la pantalla de advertencia de app no verificada en inicios de sesión recurrentes.
+      const tieneRefreshToken = typeof window !== 'undefined' &&
+        Boolean(localStorage.getItem('google_calendar_refresh_token'));
+      const provider = crearGoogleCalendarProvider(!tieneRefreshToken);
+
+      const result = await signInWithPopup(auth, provider);
       const userEmail = result.user?.email?.toLowerCase();
       if (!userEmail || !CORREOS_AUTORIZADOS.includes(userEmail)) {
         await signOut(auth);

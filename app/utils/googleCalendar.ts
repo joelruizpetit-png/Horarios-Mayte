@@ -1,4 +1,4 @@
-import { auth, db, googleCalendarProvider } from '../firebase';
+import { auth, db, crearGoogleCalendarProvider } from '../firebase';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -32,6 +32,8 @@ const STORAGE_KEY_TOKEN = 'google_calendar_token';
 const STORAGE_KEY_REFRESH_TOKEN = 'google_calendar_refresh_token';
 const STORAGE_KEY_TIMESTAMP = 'google_calendar_token_timestamp';
 const STORAGE_KEY_EXPIRES_IN = 'google_calendar_token_expires_in';
+// Timestamp absoluto de expiración del access_token (más fiable que timestamp + offset fijo)
+const STORAGE_KEY_EXPIRES_AT = 'google_calendar_token_expires_at';
 
 /**
  * Obtiene el token de acceso de Google Calendar almacenado en localStorage.
@@ -50,11 +52,22 @@ export function obtenerRefreshTokenGoogleCalendar(): string | null {
 }
 
 /**
- * Comprueba si el token almacenado ha superado los 50 minutos desde su emisión
- * (próximo a caducar, dado que Google emite tokens con validez de 60 minutos).
+ * Comprueba si el token almacenado ha caducado o está próximo a expirar (margen de 5 minutos).
+ * Usa el timestamp absoluto `expires_at` si está disponible; de lo contrario, aplica la
+ * heurística de 50 minutos desde la emisión (fallback para tokens migrados).
  */
 export function esTokenPorExpirar(): boolean {
   if (typeof window === 'undefined') return false;
+
+  // Preferir expires_at (timestamp absoluto de expiración)
+  const expiresAtStr = localStorage.getItem(STORAGE_KEY_EXPIRES_AT);
+  if (expiresAtStr) {
+    const expiresAt = Number(expiresAtStr);
+    // Margen de seguridad de 5 minutos (300 000 ms) antes de la expiración real
+    return Date.now() >= expiresAt - 5 * 60 * 1000;
+  }
+
+  // Fallback: usar timestamp de emisión + 50 minutos
   const timestampStr = localStorage.getItem(STORAGE_KEY_TIMESTAMP);
   if (!timestampStr) return true;
   const elapsed = Date.now() - Number(timestampStr);
@@ -72,9 +85,14 @@ export async function guardarTokenGoogleCalendar(
 ): Promise<void> {
   if (typeof window === 'undefined') return;
 
+  // Calcular timestamp absoluto de expiración (expires_at)
+  const duracion = (expiresIn && expiresIn > 0) ? expiresIn : 3600;
+  const expiresAt = Date.now() + duracion * 1000;
+
   try {
     localStorage.setItem(STORAGE_KEY_TOKEN, token);
     localStorage.setItem(STORAGE_KEY_TIMESTAMP, Date.now().toString());
+    localStorage.setItem(STORAGE_KEY_EXPIRES_AT, expiresAt.toString());
     if (refreshToken) {
       localStorage.setItem(STORAGE_KEY_REFRESH_TOKEN, refreshToken);
     }
@@ -100,7 +118,8 @@ export async function guardarTokenGoogleCalendar(
       const datos: Record<string, unknown> = {
         googleCalendarToken: token,
         actualizadoEn: new Date().toISOString(),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        expiresAt
       };
       if (refreshToken) {
         datos.googleCalendarRefreshToken = refreshToken;
@@ -135,6 +154,7 @@ export async function limpiarTokenGoogleCalendar(): Promise<void> {
     localStorage.removeItem(STORAGE_KEY_REFRESH_TOKEN);
     localStorage.removeItem(STORAGE_KEY_TIMESTAMP);
     localStorage.removeItem(STORAGE_KEY_EXPIRES_IN);
+    localStorage.removeItem(STORAGE_KEY_EXPIRES_AT);
 
     window.dispatchEvent(
       new CustomEvent('google-calendar-auth-changed', {
@@ -193,19 +213,27 @@ export async function sincronizarTokensDesdeFirestore(): Promise<{
       const token = (data.googleCalendarToken as string) || null;
       const refreshToken = (data.googleCalendarRefreshToken as string) || null;
 
-      if (token && typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY_TOKEN, token);
+      if (typeof window !== 'undefined') {
+        if (token) {
+          localStorage.setItem(STORAGE_KEY_TOKEN, token);
+        }
         if (data.timestamp) {
           localStorage.setItem(STORAGE_KEY_TIMESTAMP, String(data.timestamp));
+        }
+        if (data.expiresAt) {
+          localStorage.setItem(STORAGE_KEY_EXPIRES_AT, String(data.expiresAt));
         }
         if (refreshToken) {
           localStorage.setItem(STORAGE_KEY_REFRESH_TOKEN, refreshToken);
         }
-        window.dispatchEvent(
-          new CustomEvent('google-calendar-auth-changed', {
-            detail: { conectado: true, token }
-          })
-        );
+        // Emitir evento solo si hay token activo o al menos refresh_token para reconexión silenciosa
+        if (token || refreshToken) {
+          window.dispatchEvent(
+            new CustomEvent('google-calendar-auth-changed', {
+              detail: { conectado: Boolean(token || refreshToken), token: token || null }
+            })
+          );
+        }
       }
       return { token, refreshToken };
     }
@@ -326,7 +354,15 @@ export async function renovarTokenGoogleCalendar(): Promise<string | null> {
  */
 export async function conectarGoogleCalendar(): Promise<string | null> {
   try {
-    const result = await signInWithPopup(auth, googleCalendarProvider);
+    // Solo forzar 'consent' si no existe ya un refresh_token guardado.
+    // Esto evita la pantalla de advertencia de app no verificada en reconexiones posteriores.
+    const tieneRefreshToken = Boolean(
+      (typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY_REFRESH_TOKEN)) ||
+      (auth.currentUser)
+    );
+    const provider = crearGoogleCalendarProvider(!tieneRefreshToken);
+
+    const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
 
