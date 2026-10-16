@@ -156,11 +156,13 @@ export default function MenuEscolarAlma({
   const hoyISO = formatearFechaISO(hoy);
 
   useEffect(() => {
+    if (cargando) return;
+
     const frame = window.requestAnimationFrame(() => {
       tarjetaHoyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, []);
+  }, [cargando]);
 
   const cambiarSemana = (offsetDias: number) => {
     const nuevaFecha = new Date(fechaReferencia);
