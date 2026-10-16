@@ -44,12 +44,14 @@ interface CalendarioSemanalProps {
   usuario?: { email?: string | null } | null;
   fechaSeleccionada?: Date;
   onFechaChange?: (fecha: Date) => void;
+  scrollAlActivar?: number;
 }
 
 export default function CalendarioSemanal({
   usuario,
   fechaSeleccionada,
-  onFechaChange
+  onFechaChange,
+  scrollAlActivar = 0
 }: CalendarioSemanalProps = {}) {
   const [fechaInterna, setFechaInterna] = useState<Date>(new Date());
   const tarjetaHoyRef = useRef<HTMLDivElement>(null);
@@ -659,11 +661,18 @@ export default function CalendarioSemanal({
   const hoyStr = hoy.toDateString();
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      tarjetaHoyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
+    let frame = 0;
+    const timeout = window.setTimeout(() => {
+      frame = window.requestAnimationFrame(() => {
+        tarjetaHoyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }, 120);
+
+    return () => {
+      window.clearTimeout(timeout);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [scrollAlActivar]);
 
   return (
     <div style={{

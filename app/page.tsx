@@ -40,6 +40,7 @@ export default function Home() {
   const [modalVersionAbierto, setModalVersionAbierto] = useState<boolean>(false);
   const [tabActiva, setTabActiva] = useState<string>('general');
   const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(new Date());
+  const [activacionSemanal, setActivacionSemanal] = useState(0);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -195,6 +196,9 @@ export default function Home() {
             if (tab === 'semanal' || tab === 'menu-alma' || tab === 'tab4') {
               setFechaSeleccionada(new Date());
             }
+            if (tab === 'semanal') {
+              setActivacionSemanal((activacion) => activacion + 1);
+            }
             setTabActiva(tab);
           }}
           onAbrirMenuLateral={() => setMenuLateralAbierto(true)}
@@ -236,6 +240,7 @@ export default function Home() {
                   usuario={usuario} 
                   fechaSeleccionada={fechaSeleccionada}
                   onFechaChange={setFechaSeleccionada}
+                  scrollAlActivar={activacionSemanal}
                 />
               )}
               {(tabActiva === 'deportes' || tabActiva === 'tab3') && <CalendarioDeportes />}
