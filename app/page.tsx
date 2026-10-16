@@ -191,7 +191,12 @@ export default function Home() {
           usuario={usuario}
           onCerrarSesion={cerrarSesion}
           tabActiva={tabActiva}
-          onTabChange={setTabActiva}
+          onTabChange={(tab) => {
+            if (tab === 'semanal' || tab === 'menu-alma' || tab === 'tab4') {
+              setFechaSeleccionada(new Date());
+            }
+            setTabActiva(tab);
+          }}
           onAbrirMenuLateral={() => setMenuLateralAbierto(true)}
           seccionActiva={seccionPrincipal}
           onCambiarSeccion={setSeccionPrincipal}

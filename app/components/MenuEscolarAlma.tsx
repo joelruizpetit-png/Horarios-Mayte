@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { 
   collection, 
@@ -72,6 +72,7 @@ export default function MenuEscolarAlma({
 }: MenuEscolarAlmaProps) {
   // Sincronización con la fecha seleccionada activa
   const [fechaInterna, setFechaInterna] = useState<Date>(new Date());
+  const tarjetaHoyRef = useRef<HTMLDivElement>(null);
   const fechaReferencia = fechaSeleccionada || fechaInterna;
 
   const [menus, setMenus] = useState<Record<string, MenuDia>>({});
@@ -153,6 +154,13 @@ export default function MenuEscolarAlma({
 
   const hoy = new Date();
   const hoyISO = formatearFechaISO(hoy);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      tarjetaHoyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const cambiarSemana = (offsetDias: number) => {
     const nuevaFecha = new Date(fechaReferencia);
@@ -468,12 +476,14 @@ export default function MenuEscolarAlma({
             return (
               <div
                 key={iso}
+                ref={esHoy ? tarjetaHoyRef : undefined}
                 style={{
                   backgroundColor: '#ffffff',
                   borderRadius: '12px',
                   border: esHoy ? '2px solid #0047b3' : '1px solid #e5e7eb',
                   boxShadow: esHoy ? '0 4px 12px rgba(0, 71, 179, 0.1)' : '0 2px 4px rgba(0,0,0,0.03)',
                   overflow: 'hidden',
+                  scrollMarginTop: '150px',
                   display: 'flex',
                   flexDirection: 'column'
                 }}

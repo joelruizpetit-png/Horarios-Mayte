@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db, auth } from '../firebase'; 
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { registrarActividad, formatearNombreFamiliar } from '../utils/actividad';
@@ -52,6 +52,7 @@ export default function CalendarioSemanal({
   onFechaChange
 }: CalendarioSemanalProps = {}) {
   const [fechaInterna, setFechaInterna] = useState<Date>(new Date());
+  const tarjetaHoyRef = useRef<HTMLDivElement>(null);
   const fechaReferencia = fechaSeleccionada || fechaInterna;
   const [eventos, setEventos] = useState<Record<string, (Evento | string)[]>>({});
   const [mostrarModal, setMostrarModal] = useState(false);
@@ -657,6 +658,13 @@ export default function CalendarioSemanal({
   const hoy = new Date();
   const hoyStr = hoy.toDateString();
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      tarjetaHoyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
   return (
     <div style={{
       width: '100%',
@@ -827,12 +835,14 @@ export default function CalendarioSemanal({
           return (
             <div
               key={claveDia}
+              ref={esHoy ? tarjetaHoyRef : undefined}
               style={{
                 backgroundColor: '#ffffff',
                 borderRadius: '12px',
                 border: esHoy ? '2px solid #0047b3' : '1px solid #e5e7eb',
                 boxShadow: esHoy ? '0 4px 12px rgba(0, 71, 179, 0.1)' : '0 2px 4px rgba(0,0,0,0.03)',
                 padding: '12px 14px',
+                scrollMarginTop: '150px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px'
