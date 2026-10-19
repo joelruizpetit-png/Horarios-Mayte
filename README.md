@@ -34,3 +34,16 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+### Google Calendar OAuth
+
+Google Calendar uses a server-side OAuth flow. Its renewable permission is kept in an `HttpOnly` cookie tied to the Firebase user. Configure these Vercel environment variables:
+
+- `GOOGLE_CLIENT_ID`: OAuth client ID for a Web application.
+- `GOOGLE_CLIENT_SECRET`: secret for that same OAuth client; it is used only on the server.
+- `GOOGLE_OAUTH_REDIRECT_URI`: exact URL `https://<production-domain>/api/auth/google/callback`.
+- `GOOGLE_OAUTH_STATE_SECRET`: a long, randomly generated secret used to sign OAuth state.
+
+Add that exact URL to **Authorized redirect URIs** for the OAuth client in Google Cloud Console. For local development, authorize `http://localhost:3000/api/auth/google/callback` and set the same value in the local `GOOGLE_OAUTH_REDIRECT_URI`. Redeploy after changing Vercel environment variables.
+
+Set the OAuth consent screen to **In production** for ongoing Calendar access. When an external OAuth app is left in **Testing**, Google expires refresh tokens for non-basic scopes such as Calendar after 7 days. See [Google's OAuth documentation](https://developers.google.com/identity/protocols/oauth2#expiration).

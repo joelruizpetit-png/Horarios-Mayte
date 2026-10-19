@@ -1,6 +1,5 @@
-import { auth, db, crearGoogleCalendarProvider } from '../firebase';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 export interface EventoAgendaGC {
   titulo: string;
@@ -44,14 +43,6 @@ export function obtenerTokenGoogleCalendar(): string | null {
 }
 
 /**
- * Obtiene el token de actualización (refresh token) almacenado en localStorage.
- */
-export function obtenerRefreshTokenGoogleCalendar(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(STORAGE_KEY_REFRESH_TOKEN);
-}
-
-/**
  * Comprueba si el token almacenado ha caducado o está próximo a expirar (margen de 5 minutos).
  * Usa el timestamp absoluto `expires_at` si está disponible; de lo contrario, aplica la
  * heurística de 50 minutos desde la emisión (fallback para tokens migrados).
@@ -63,6 +54,7 @@ export function esTokenPorExpirar(): boolean {
   const expiresAtStr = localStorage.getItem(STORAGE_KEY_EXPIRES_AT);
   if (expiresAtStr) {
     const expiresAt = Number(expiresAtStr);
+    if (!Number.isFinite(expiresAt) || expiresAt <= 0) return true;
     // Margen de seguridad de 5 minutos (300 000 ms) antes de la expiración real
     return Date.now() >= expiresAt - 5 * 60 * 1000;
   }
@@ -70,17 +62,18 @@ export function esTokenPorExpirar(): boolean {
   // Fallback: usar timestamp de emisión + 50 minutos
   const timestampStr = localStorage.getItem(STORAGE_KEY_TIMESTAMP);
   if (!timestampStr) return true;
-  const elapsed = Date.now() - Number(timestampStr);
+  const timestamp = Number(timestampStr);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return true;
+  const elapsed = Date.now() - timestamp;
   return elapsed > 50 * 60 * 1000;
 }
 
 /**
- * Guarda el token de acceso, el refresh_token y la marca de tiempo actual tanto en localStorage
- * como vinculados a la sesión del usuario en Firebase (Firestore) para persistencia multidispositivo.
+ * Guarda únicamente el token de acceso de corta duración en el dispositivo.
+ * El refresh token real se conserva en una cookie HttpOnly gestionada por el servidor.
  */
 export async function guardarTokenGoogleCalendar(
   token: string,
-  refreshToken?: string | null,
   expiresIn?: number
 ): Promise<void> {
   if (typeof window === 'undefined') return;
@@ -93,9 +86,9 @@ export async function guardarTokenGoogleCalendar(
     localStorage.setItem(STORAGE_KEY_TOKEN, token);
     localStorage.setItem(STORAGE_KEY_TIMESTAMP, Date.now().toString());
     localStorage.setItem(STORAGE_KEY_EXPIRES_AT, expiresAt.toString());
-    if (refreshToken) {
-      localStorage.setItem(STORAGE_KEY_REFRESH_TOKEN, refreshToken);
-    }
+    // Eliminar cualquier refresh token antiguo. Firebase devolvía aquí su propio
+    // token de sesión, que no sirve para renovar el acceso a Google Calendar.
+    localStorage.removeItem(STORAGE_KEY_REFRESH_TOKEN);
     if (expiresIn) {
       localStorage.setItem(STORAGE_KEY_EXPIRES_IN, expiresIn.toString());
     }
@@ -109,42 +102,11 @@ export async function guardarTokenGoogleCalendar(
   } catch (e) {
     console.warn('Error al guardar tokens en localStorage:', e);
   }
-
-  // Persistir en Firestore vinculado al usuario activo en Firebase Auth
-  try {
-    const user = auth.currentUser;
-    if (user) {
-      const userRef = doc(db, 'usuarios_config', user.uid);
-      const datos: Record<string, unknown> = {
-        googleCalendarToken: token,
-        actualizadoEn: new Date().toISOString(),
-        timestamp: Date.now(),
-        expiresAt
-      };
-      if (refreshToken) {
-        datos.googleCalendarRefreshToken = refreshToken;
-      }
-      await setDoc(userRef, datos, { merge: true });
-
-      // También mantener registro en la configuración general de sincronización compartida
-      await setDoc(
-        doc(db, 'configuracion', 'google_calendar'),
-        {
-          ultimoToken: token,
-          ultimoRefreshToken: refreshToken || null,
-          actualizadoPor: user.email || user.uid,
-          actualizadoEn: new Date().toISOString()
-        },
-        { merge: true }
-      );
-    }
-  } catch (err) {
-    console.warn('Error al persistir tokens en Firestore:', err);
-  }
 }
 
 /**
- * Elimina los tokens de Google Calendar (solo al cerrar sesión explícitamente).
+ * Borra el token temporal del dispositivo al cerrar sesión en la aplicación.
+ * La autorización duradera queda en la cookie segura y no se revoca al salir.
  */
 export async function limpiarTokenGoogleCalendar(): Promise<void> {
   if (typeof window === 'undefined') return;
@@ -165,39 +127,23 @@ export async function limpiarTokenGoogleCalendar(): Promise<void> {
     console.warn('Error al limpiar localStorage de Google Calendar:', e);
   }
 
-  try {
-    const user = auth.currentUser;
-    if (user) {
-      await setDoc(
-        doc(db, 'usuarios_config', user.uid),
-        {
-          googleCalendarToken: null,
-          googleCalendarRefreshToken: null,
-          desconectadoEn: new Date().toISOString()
-        },
-        { merge: true }
-      );
-    }
-  } catch (err) {
-    console.warn('Error al limpiar sesión en Firestore:', err);
-  }
+  // No borrar la cookie HttpOnly: permite renovar Calendar la próxima vez que
+  // el mismo usuario vuelva a iniciar sesión en este navegador.
 }
 
 /**
- * Indica si el usuario tiene una sesión de Google Calendar activa y válida o renovable.
- * Es permanente mientras exista un token de acceso o un refresh token.
+ * Indica si el token de acceso local sigue dentro de su periodo de validez.
  */
 export function estaGoogleCalendarConectado(): boolean {
   if (typeof window === 'undefined') return false;
   const token = localStorage.getItem(STORAGE_KEY_TOKEN);
-  const refreshToken = localStorage.getItem(STORAGE_KEY_REFRESH_TOKEN);
-  return Boolean(token || refreshToken);
+  return Boolean(token && !esTokenPorExpirar());
 }
 
 /**
- * Recupera los tokens persistidos en Firestore en caso de que localStorage haya sido vaciado.
+ * Restaura la conexión duradera del usuario mediante el endpoint seguro del servidor.
  */
-export async function sincronizarTokensDesdeFirestore(): Promise<{
+export async function restaurarSesionGoogleCalendar(): Promise<{
   token: string | null;
   refreshToken: string | null;
 }> {
@@ -205,40 +151,34 @@ export async function sincronizarTokensDesdeFirestore(): Promise<{
     const user = auth.currentUser;
     if (!user) return { token: null, refreshToken: null };
 
-    const docRef = doc(db, 'usuarios_config', user.uid);
-    const snap = await getDoc(docRef);
-
-    if (snap.exists()) {
-      const data = snap.data();
-      const token = (data.googleCalendarToken as string) || null;
-      const refreshToken = (data.googleCalendarRefreshToken as string) || null;
-
-      if (typeof window !== 'undefined') {
-        if (token) {
-          localStorage.setItem(STORAGE_KEY_TOKEN, token);
-        }
-        if (data.timestamp) {
-          localStorage.setItem(STORAGE_KEY_TIMESTAMP, String(data.timestamp));
-        }
-        if (data.expiresAt) {
-          localStorage.setItem(STORAGE_KEY_EXPIRES_AT, String(data.expiresAt));
-        }
-        if (refreshToken) {
-          localStorage.setItem(STORAGE_KEY_REFRESH_TOKEN, refreshToken);
-        }
-        // Emitir evento solo si hay token activo o al menos refresh_token para reconexión silenciosa
-        if (token || refreshToken) {
-          window.dispatchEvent(
-            new CustomEvent('google-calendar-auth-changed', {
-              detail: { conectado: Boolean(token || refreshToken), token: token || null }
-            })
-          );
-        }
+    // Retirar los credenciales erróneos del flujo antiguo de Firebase Auth.
+    // No se usan para renovar Google Calendar y no deben seguir almacenados.
+    const legacyCleanupKey = 'google_calendar_legacy_tokens_removed_v1';
+    if (!localStorage.getItem(legacyCleanupKey)) {
+      try {
+        await Promise.all([
+          setDoc(doc(db, 'usuarios_config', user.uid), {
+            googleCalendarToken: null,
+            googleCalendarRefreshToken: null,
+            timestamp: null,
+            expiresAt: null
+          }, { merge: true }),
+          setDoc(doc(db, 'configuracion', 'google_calendar'), {
+            ultimoToken: null,
+            ultimoRefreshToken: null
+          }, { merge: true })
+        ]);
+        localStorage.setItem(legacyCleanupKey, 'true');
+      } catch (cleanupError) {
+        // La limpieza heredada no debe impedir la renovación mediante la cookie.
+        console.warn('No se pudieron retirar algunos tokens antiguos de Firestore:', cleanupError);
       }
-      return { token, refreshToken };
     }
+
+    const token = await renovarTokenGoogleCalendar();
+    return { token, refreshToken: null };
   } catch (err) {
-    console.warn('Error al recuperar tokens de Firestore:', err);
+    console.warn('Error al restaurar la sesión de Google Calendar:', err);
   }
   return { token: null, refreshToken: null };
 }
@@ -248,8 +188,7 @@ let renovacionEnCurso: Promise<string | null> | null = null;
 
 /**
  * 2. RENOVACIÓN AUTOMÁTICA (Silent Refresh):
- * Renueva el token de acceso de Google Calendar en segundo plano utilizando el refresh_token
- * sin requerir la intervención del usuario ni mostrar ventanas emergentes.
+ * Renueva el token corto de Google Calendar usando la cookie HttpOnly del servidor.
  */
 export async function renovarTokenGoogleCalendar(): Promise<string | null> {
   if (renovacionEnCurso) {
@@ -260,82 +199,31 @@ export async function renovarTokenGoogleCalendar(): Promise<string | null> {
     try {
       if (typeof window === 'undefined') return null;
 
-      let refreshToken = localStorage.getItem(STORAGE_KEY_REFRESH_TOKEN);
+      const user = auth.currentUser;
+      if (!user) return null;
 
-      if (!refreshToken) {
-        const recuperados = await sincronizarTokensDesdeFirestore();
-        refreshToken = recuperados.refreshToken;
-      }
-
-      if (!refreshToken) {
-        console.warn('No se dispone de refresh_token para renovación silenciosa de Google Calendar.');
+      localStorage.removeItem(STORAGE_KEY_REFRESH_TOKEN);
+      const firebaseIdToken = await user.getIdToken();
+      const response = await fetch('/api/auth/google/refresh', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${firebaseIdToken}` },
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.exito || !data.accessToken) {
+        if (response.status === 401) {
+          localStorage.removeItem(STORAGE_KEY_TOKEN);
+          localStorage.removeItem(STORAGE_KEY_EXPIRES_AT);
+          window.dispatchEvent(new CustomEvent('google-calendar-auth-changed', {
+            detail: { conectado: false, token: null }
+          }));
+        }
         return null;
       }
 
-      console.log('🔄 Renovando token de Google Calendar en segundo plano (Silent Refresh)...');
-
-      // 1. Intentar renovación mediante endpoint de API interna Next.js
-      try {
-        const res = await fetch('/api/auth/google/refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.exito && data.accessToken) {
-            console.log('✓ Token de Google Calendar renovado exitosamente en segundo plano.');
-            await guardarTokenGoogleCalendar(data.accessToken, refreshToken, data.expiresIn);
-            return data.accessToken;
-          }
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          console.warn('Aviso API de renovación:', errData);
-        }
-      } catch (errApi) {
-        console.warn('Fallo de conexión con /api/auth/google/refresh:', errApi);
-      }
-
-      // 2. Intentar renovación directa con endpoint de Google OAuth si hay client_id público
-      try {
-        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-        const params = new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: refreshToken
-        });
-        if (clientId) {
-          params.append('client_id', clientId);
-        }
-
-        const googleRes = await fetch('https://oauth2.googleapis.com/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString()
-        });
-
-        if (googleRes.ok) {
-          const googleData = await googleRes.json();
-          if (googleData.access_token) {
-            console.log('✓ Token renovado directamente desde endpoint de Google.');
-            await guardarTokenGoogleCalendar(googleData.access_token, refreshToken, googleData.expires_in);
-            return googleData.access_token;
-          }
-        }
-      } catch (errDirect) {
-        console.warn('Fallo en endpoint directo de Google:', errDirect);
-      }
-
-      // 3. Forzar refresco de ID token de Firebase Auth si el usuario está autenticado
-      try {
-        if (auth.currentUser) {
-          await auth.currentUser.getIdToken(true);
-        }
-      } catch (errFb) {
-        console.warn('Error al actualizar token de sesión de Firebase:', errFb);
-      }
-
-      return null;
+      await guardarTokenGoogleCalendar(data.accessToken, data.expiresIn);
+      return data.accessToken;
     } catch (error) {
       console.error('Error durante la renovación automática de Google Calendar:', error);
       return null;
@@ -349,44 +237,29 @@ export async function renovarTokenGoogleCalendar(): Promise<string | null> {
 
 /**
  * 1. PERSISTENCIA Y REFRESCAMIENTO:
- * Solicita permisos interactivos para Google Calendar forzando acceso offline
- * y consentimiento, almacenando de forma persistente tanto el accessToken como el refreshToken.
+ * Inicia el flujo OAuth de código de autorización. El servidor recibe y guarda
+ * el refresh token; el navegador solo recibe el access token de corta duración.
  */
 export async function conectarGoogleCalendar(): Promise<string | null> {
   try {
-    // Solo forzar 'consent' si no existe ya un refresh_token guardado.
-    // Esto evita la pantalla de advertencia de app no verificada en reconexiones posteriores.
-    const tieneRefreshToken = Boolean(
-      (typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY_REFRESH_TOKEN)) ||
-      (auth.currentUser)
-    );
-    const provider = crearGoogleCalendarProvider(!tieneRefreshToken);
+    const user = auth.currentUser;
+    if (!user || typeof window === 'undefined') return null;
 
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const token = credential?.accessToken;
-
-    const rawResponse = (result as unknown as {
-      _tokenResponse?: {
-        refreshToken?: string;
-        oauthRefreshToken?: string;
-        expiresIn?: number;
-      };
-      user?: {
-        refreshToken?: string;
-      };
-    })._tokenResponse;
-
-    const refreshToken =
-      rawResponse?.refreshToken ||
-      rawResponse?.oauthRefreshToken ||
-      (credential as unknown as { refreshToken?: string })?.refreshToken ||
-      result.user?.refreshToken;
-
-    if (token) {
-      await guardarTokenGoogleCalendar(token, refreshToken, rawResponse?.expiresIn);
-      return token;
+    const firebaseIdToken = await user.getIdToken();
+    const response = await fetch('/api/auth/google/authorize', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${firebaseIdToken}` },
+      credentials: 'same-origin',
+      cache: 'no-store'
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.authorizationUrl) {
+      console.error('No se pudo iniciar OAuth de Google Calendar:', data.error || response.status);
+      return null;
     }
+
+    window.location.assign(data.authorizationUrl);
+    return null;
   } catch (error: unknown) {
     const authError = error as { code?: string; message?: string };
     if (authError.code === 'auth/popup-closed-by-user') {
@@ -400,7 +273,7 @@ export async function conectarGoogleCalendar(): Promise<string | null> {
 
 /**
  * Asegura la disponibilidad de un token válido de Google Calendar.
- * Si el token no existe o está por expirar (> 50 min), ejecuta renovación silenciosa en segundo plano.
+ * Si no existe o está próximo a expirar, ejecuta la renovación silenciosa.
  * Solo si todo lo anterior falla y `promptSiFalta` es true, invoca la ventana interactiva.
  */
 export async function asegurarTokenGoogleCalendar(promptSiFalta = false): Promise<string | null> {
@@ -414,13 +287,8 @@ export async function asegurarTokenGoogleCalendar(promptSiFalta = false): Promis
     }
   }
 
-  if (token) return token;
-
-  // Intentar rescatar desde Firestore
-  const desdeFirestore = await sincronizarTokensDesdeFirestore();
-  if (desdeFirestore.token) {
-    return desdeFirestore.token;
-  }
+  token = obtenerTokenGoogleCalendar();
+  if (token && !esTokenPorExpirar()) return token;
 
   if (promptSiFalta) {
     token = await conectarGoogleCalendar();

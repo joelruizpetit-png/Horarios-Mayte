@@ -11,7 +11,7 @@ import FinanzasFamiliares from './components/FinanzasFamiliares';
 import ListaCompra from './components/ListaCompra';
 import ModalNovedades from './components/ModalNovedades';
 import ModalVersion from './components/ModalVersion';
-import { auth, db, crearGoogleCalendarProvider } from './firebase';
+import { auth, db } from './firebase';
 import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
@@ -23,7 +23,7 @@ import {
 import {
   guardarTokenGoogleCalendar,
   limpiarTokenGoogleCalendar,
-  sincronizarTokensDesdeFirestore
+  restaurarSesionGoogleCalendar
 } from './utils/googleCalendar';
 import { sincronizarMenuOctubreFirestore } from './data/menuOctubre2026';
 
@@ -69,15 +69,35 @@ export default function Home() {
           });
         }
 
-        // Sincronizar tokens persistentes de Google Calendar desde Firestore si faltan en localStorage
-        sincronizarTokensDesdeFirestore().catch((err) => {
-          console.warn("No se pudieron sincronizar tokens de Calendar desde Firestore:", err);
+        // Restaurar silenciosamente Google Calendar desde la cookie segura del servidor.
+        restaurarSesionGoogleCalendar().catch((err) => {
+          console.warn("No se pudo restaurar la sesión de Google Calendar:", err);
         });
       }
       setUsuario(user);
       setLoading(false);
     });
     return () => cancelarSuscripcion();
+  }, []);
+
+  // Google devuelve el token corto en el fragmento de la URL. Guardarlo y
+  // limpiar enseguida la dirección evita dejarlo en el historial del navegador.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const conectado = params.get('gcal_connected');
+    const accessToken = params.get('access_token');
+    const errorOAuth = params.get('gcal_error');
+    if (!conectado && !errorOAuth) return;
+
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    if (conectado === '1' && accessToken) {
+      const expiresIn = Number(params.get('expires_in')) || 3600;
+      guardarTokenGoogleCalendar(accessToken, expiresIn).then(() => {
+        window.alert('Google Calendar se ha conectado correctamente. La conexión se renovará automáticamente.');
+      });
+    } else if (errorOAuth) {
+      window.alert(errorOAuth);
+    }
   }, []);
 
   const iniciarSesion = async (e: React.FormEvent) => {
@@ -94,11 +114,9 @@ export default function Home() {
   const iniciarSesionConGoogle = async () => {
     setError("");
     try {
-      // Usar provider dinámico: solo forzar 'consent' si no hay refresh_token ya guardado.
-      // Esto evita la pantalla de advertencia de app no verificada en inicios de sesión recurrentes.
-      const tieneRefreshToken = typeof window !== 'undefined' &&
-        Boolean(localStorage.getItem('google_calendar_refresh_token'));
-      const provider = crearGoogleCalendarProvider(!tieneRefreshToken);
+      // El inicio de sesión de la aplicación es independiente de la autorización
+      // renovable de Google Calendar.
+      const provider = new GoogleAuthProvider();
 
       const result = await signInWithPopup(auth, provider);
       const userEmail = result.user?.email?.toLowerCase();
@@ -109,27 +127,6 @@ export default function Home() {
         return;
       }
 
-      // Guardar de forma persistente el token de acceso y el refresh token para Google Calendar
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const token = credential?.accessToken;
-
-      const rawResponse = (result as unknown as {
-        _tokenResponse?: {
-          refreshToken?: string;
-          oauthRefreshToken?: string;
-          expiresIn?: number;
-        };
-      })._tokenResponse;
-
-      const refreshToken =
-        rawResponse?.refreshToken ||
-        rawResponse?.oauthRefreshToken ||
-        (credential as unknown as { refreshToken?: string })?.refreshToken ||
-        result.user?.refreshToken;
-
-      if (token) {
-        await guardarTokenGoogleCalendar(token, refreshToken, rawResponse?.expiresIn);
-      }
     } catch (err: unknown) {
       console.error(err);
       const authError = err as { code?: string };
