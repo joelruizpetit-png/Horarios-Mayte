@@ -50,6 +50,17 @@ function normalizarPronostico(valor: unknown): Pronostico[] {
   return ['1', 'X', '2'].filter((opcion) => opciones.some((entrada) => String(entrada).toUpperCase() === opcion)) as Pronostico[];
 }
 
+function normalizarMarcadorOCR(valor: string): Pronostico[] {
+  // Tesseract puede leer la X como signo de multiplicación, y el 1 como I o l.
+  return normalizarPronostico(valor.replace(/×/g, 'X').replace(/[iIlL]/g, '1'));
+}
+
+function leerMarcadorAislado(linea: string | undefined): Pronostico[] {
+  if (!linea) return [];
+  const marcador = linea.trim().match(/^[\[({]?\s*([1xX2×iIlL])\s*[\])}]?\s*[✓✔☑✅]*$/);
+  return marcador ? normalizarMarcadorOCR(marcador[1]) : [];
+}
+
 function normalizarNombreEquipo(nombre: string): string {
   return nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\b(fc|cf|ac|afc|sc|club|de|la|el|los|las|the)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
 }
@@ -64,8 +75,9 @@ function equipoMencionado(segmento: string, equipo: string): boolean {
 }
 
 function leerSeleccionDoble(lineas: string[], indice: number, local: string, visitante: string): Pronostico[] {
-  const contexto = lineas.slice(Math.max(0, indice - 3), indice)
-    .map((linea) => linea.replace(/^[x×]\s*/i, '').replace(/\b\d+[.,]\d{1,3}\b/g, ' ').replace(/\bCantidad\b/gi, ' ').replace(/Doble oportunidad/gi, ' '))
+  const lineasCercanas = lineas.slice(Math.max(0, indice - 3), indice)
+    .map((linea) => linea.replace(/^[x×]\s*/i, '').replace(/\b\d+[.,]\d{1,3}\b/g, ' ').replace(/\bCantidad\b/gi, ' ').replace(/Doble oportunidad/gi, ' '));
+  const contexto = lineasCercanas
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -75,6 +87,17 @@ function leerSeleccionDoble(lineas: string[], indice: number, local: string, vis
     const equipo = (primeraEsEmpate ? partes[2] : partes[1]).replace(/\b(doble oportunidad|mostrar opciones|selecciones|saldo)\b/gi, ' ').trim();
     if (equipoMencionado(equipo, local)) return ['1', 'X'];
     if (equipoMencionado(equipo, visitante)) return ['X', '2'];
+  }
+
+  // En apuestas de resultado final suele mostrarse el equipo elegido como texto,
+  // sin imprimir el signo 1 o 2 al lado del partido.
+  if (/resultado\s+final/i.test(contexto)) {
+    const seleccion = [...lineasCercanas].reverse().find((linea) =>
+      linea.trim() && !/resultado\s+final|selecciones|saldo|mostrar opciones/i.test(linea),
+    )?.trim();
+    if (seleccion && /^empate$/i.test(seleccion)) return ['X'];
+    if (seleccion && equipoMencionado(seleccion, local)) return ['1'];
+    if (seleccion && equipoMencionado(seleccion, visitante)) return ['2'];
   }
   return [];
 }
@@ -120,7 +143,7 @@ function extraerPartidos(texto: string): PartidoQuiniela[] {
   const lineas = texto.split(/\r?\n/).map((linea) => linea.trim()).filter(Boolean);
   for (const [indice, lineaOriginal] of lineas.entries()) {
     const lineaSinNumero = lineaOriginal.trim().replace(/^\d{1,2}\s*[.)]\s*/, '');
-    const marcador = lineaSinNumero.match(/\s+\(?([1xX2]{1,3})\)?\s*$/);
+    const marcador = lineaSinNumero.match(/\s+\(?([1xX2×iIlL]{1,3})\)?(?:\s*[✓✔☑✅])?\s*$/);
     const linea = marcador ? lineaSinNumero.slice(0, marcador.index).trim() : lineaSinNumero;
     const separada = linea.match(/^(.{3,55}?)\s+(?:vs\.?|v\.?|contra|[-–—])\s+(.{3,55}?)$/i);
     if (!separada) continue;
@@ -128,7 +151,10 @@ function extraerPartidos(texto: string): PartidoQuiniela[] {
     const visitante = separada[2].replace(/^[|•]+/, '').replace(/\s+[1xX2]$/, '').trim();
     if (local && visitante && !/^(partido|selección|seleccion|pronóstico|pronostico)$/i.test(local)) {
       const partido = nuevoPartido(local, visitante);
-      partido.pronostico = marcador ? normalizarPronostico(marcador[1]) : leerSeleccionDoble(lineas, indice, local, visitante);
+      const marcadorSeparado = leerMarcadorAislado(lineas[indice + 1]);
+      partido.pronostico = marcador
+        ? normalizarMarcadorOCR(marcador[1])
+        : marcadorSeparado.length > 0 ? marcadorSeparado : leerSeleccionDoble(lineas, indice, local, visitante);
       encontrados.push(partido);
     }
   }
@@ -151,6 +177,8 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const entradaCapturasRef = useRef<HTMLInputElement>(null);
   const [leyendoFoto, setLeyendoFoto] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [reiniciandoEstadisticas, setReiniciandoEstadisticas] = useState(false);
+  const [reinicioEstadisticasEn, setReinicioEstadisticasEn] = useState('');
   const [mensaje, setMensaje] = useState('');
 
   useEffect(() => onSnapshot(collection(db, COLECCION), (snapshot) => {
@@ -176,18 +204,30 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
 
   useEffect(() => onSnapshot(doc(db, COLECCION_CONFIGURACION, 'saldo'), (snapshot) => {
     if (!snapshot.exists()) return;
-    const guardado = Number(snapshot.data().saldoInicial);
+    const configuracion = snapshot.data();
+    const guardado = Number(configuracion.saldoInicial);
     if (Number.isFinite(guardado) && guardado >= 0) setSaldoInicial(guardado.toFixed(2));
+    setReinicioEstadisticasEn(typeof configuracion.reinicioEstadisticasEn === 'string' ? configuracion.reinicioEstadisticasEn : '');
   }, (error) => {
     console.error('No se pudo cargar el saldo inicial:', error);
     setMensaje('No se pudo cargar el saldo inicial.');
   }), []);
 
+  const boletosEstadisticas = useMemo(() => {
+    if (!reinicioEstadisticasEn) return boletosContabilizados;
+    const instanteReinicio = Date.parse(reinicioEstadisticasEn);
+    if (!Number.isFinite(instanteReinicio)) return boletosContabilizados;
+    return boletosContabilizados.filter((boleto) => {
+      const creadoEn = Date.parse(boleto.creadoEn || '');
+      return Number.isFinite(creadoEn) && creadoEn > instanteReinicio;
+    });
+  }, [boletosContabilizados, reinicioEstadisticasEn]);
+
   const saldoInicialNumero = Math.max(0, Number(saldoInicial.replace(',', '.')) || 0);
   const saldosPorBoleto = useMemo(() => {
     const calculados: Record<string, { inicial: number; acumulado: number }> = {};
     let balance = saldoInicialNumero;
-    const ordenados = [...boletosContabilizados].sort((a, b) => (a.creadoEn || '').localeCompare(b.creadoEn || ''));
+    const ordenados = [...boletosEstadisticas].sort((a, b) => (a.creadoEn || '').localeCompare(b.creadoEn || ''));
     for (const boleto of ordenados) {
       const apuesta = Number(boleto.importe) || 0;
       const cuotaBoleto = Number(boleto.cuota) || 0;
@@ -199,7 +239,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
       calculados[boleto.id] = { inicial, acumulado: balance };
     }
     return { porBoleto: calculados, actual: balance };
-  }, [boletosContabilizados, saldoInicialNumero]);
+  }, [boletosEstadisticas, saldoInicialNumero]);
 
   const guardarSaldoInicial = async () => {
     const valor = Number(saldoInicial.replace(',', '.'));
@@ -216,11 +256,33 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     }
   };
 
+  const reiniciarEstadisticas = async () => {
+    const confirmado = window.confirm('¿Reiniciar las estadísticas? Los boletos anteriores se conservarán en Quinielas e Historial, pero dejarán de contar. El saldo inicial volverá a 0,00 €.');
+    if (!confirmado) return;
+    const fechaReinicio = new Date().toISOString();
+    setReiniciandoEstadisticas(true);
+    try {
+      await setDoc(doc(db, COLECCION_CONFIGURACION, 'saldo'), {
+        saldoInicial: 0,
+        reinicioEstadisticasEn: fechaReinicio,
+        actualizadoEn: fechaReinicio,
+      }, { merge: true });
+      setSaldoInicial('0.00');
+      setReinicioEstadisticasEn(fechaReinicio);
+      setMensaje('Estadísticas reiniciadas. Los nuevos boletos empezarán a contar desde cero.');
+    } catch (error) {
+      console.error('No se pudieron reiniciar las estadísticas:', error);
+      setMensaje('No se pudieron reiniciar las estadísticas. Inténtalo de nuevo.');
+    } finally {
+      setReiniciandoEstadisticas(false);
+    }
+  };
+
   const resumen = useMemo(() => {
-    const todosPartidos = boletosContabilizados.flatMap((boleto) => boleto.partidos || []);
-    const cuotas = boletosContabilizados.filter((boleto) => Number(boleto.cuota) > 0);
-    const apostado = boletosContabilizados.reduce((total, boleto) => total + (Number(boleto.importe) || 0), 0);
-    const liquidados = boletosContabilizados.filter((boleto) => (boleto.partidos || []).length > 0 && (boleto.partidos.some((partido) => partido.resultado === 'fallado') || boleto.partidos.every((partido) => partido.resultado === 'acertado')));
+    const todosPartidos = boletosEstadisticas.flatMap((boleto) => boleto.partidos || []);
+    const cuotas = boletosEstadisticas.filter((boleto) => Number(boleto.cuota) > 0);
+    const apostado = boletosEstadisticas.reduce((total, boleto) => total + (Number(boleto.importe) || 0), 0);
+    const liquidados = boletosEstadisticas.filter((boleto) => (boleto.partidos || []).length > 0 && (boleto.partidos.some((partido) => partido.resultado === 'fallado') || boleto.partidos.every((partido) => partido.resultado === 'acertado')));
     const beneficio = liquidados.reduce((total, boleto) => {
       const perdido = boleto.partidos.some((partido) => partido.resultado === 'fallado');
       return total + (perdido ? -(Number(boleto.importe) || 0) : (Number(boleto.importe) || 0) * ((Number(boleto.cuota) || 0) - 1));
@@ -234,7 +296,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
       beneficio,
       liquidados: liquidados.length,
     };
-  }, [boletosContabilizados]);
+  }, [boletosEstadisticas]);
 
   const procesarFoto = async (evento: ChangeEvent<HTMLInputElement>) => {
     const archivos = Array.from(evento.target.files || []);
@@ -434,6 +496,11 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
         )
       ) : vista === 'estadisticas' ? (
         <>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <button type="button" onClick={reiniciarEstadisticas} disabled={reiniciandoEstadisticas} style={{ border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', background: '#fff', color: '#b91c1c', fontWeight: 750, cursor: reiniciandoEstadisticas ? 'wait' : 'pointer', opacity: reiniciandoEstadisticas ? 0.65 : 1 }}>
+              {reiniciandoEstadisticas ? 'Reiniciando…' : '↻ Reiniciar estadísticas'}
+            </button>
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
             {tarjeta('Partidos insertados', `${resumen.total}`, '#0047b3', '#eff6ff')}
             {tarjeta('Acertados', `${resumen.acertados}`, '#15803d', '#f0fdf4')}
