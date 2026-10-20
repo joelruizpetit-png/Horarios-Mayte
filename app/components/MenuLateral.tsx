@@ -1,13 +1,16 @@
 "use client";
 import React, { useEffect } from 'react';
+import Image from 'next/image';
 import { formatearNombreFamiliar } from '../utils/actividad';
 import { APP_VERSION } from '../data/version';
+
+export type SeccionPrincipal = 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas' | 'quinielas' | 'quinielas-estadisticas' | 'quinielas-historial';
 
 interface MenuLateralProps {
   abierto: boolean;
   onCerrar: () => void;
-  seccionActiva: 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas';
-  onCambiarSeccion: (seccion: 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas') => void;
+  seccionActiva: SeccionPrincipal;
+  onCambiarSeccion: (seccion: SeccionPrincipal) => void;
   usuario: {
     displayName?: string | null;
     email?: string | null;
@@ -122,21 +125,20 @@ export default function MenuLateral({
 
           {/* LOGO Y TÍTULO */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              width: '38px',
-              height: '38px',
-              backgroundColor: '#ffffff',
-              borderRadius: '10px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 800,
-              fontSize: '18px',
-              color: '#0047b3',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
-            }}>
-              PF
-            </div>
+            <Image
+              src="/icon.png"
+              alt="Logo de Planificador Familiar"
+              width={38}
+              height={38}
+              style={{
+                width: '38px',
+                height: '38px',
+                objectFit: 'contain',
+                backgroundColor: '#ffffff',
+                borderRadius: '10px',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+              }}
+            />
             <div>
               <div style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '-0.2px', lineHeight: 1.2 }}>
                 Planificador Familiar
@@ -461,6 +463,31 @@ export default function MenuLateral({
               }} />
             )}
           </button>
+
+          {/* OPCIÓN 5: QUINIELAS Y SU SUBMENÚ */}
+          <div style={{ border: seccionActiva.startsWith('quinielas') ? '2px solid #fde68a' : '1px solid #f1f5f9', borderRadius: 12, background: seccionActiva.startsWith('quinielas') ? '#fffbeb' : '#fff', overflow: 'hidden' }}>
+            <button
+              onClick={() => { onCambiarSeccion('quinielas'); onCerrar(); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', width: '100%', border: 0, background: 'transparent', color: seccionActiva.startsWith('quinielas') ? '#92400e' : '#334155', cursor: 'pointer', textAlign: 'left' }}
+            >
+              <span style={{ width: 38, height: 38, borderRadius: 10, background: seccionActiva.startsWith('quinielas') ? '#fef3c7' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎟️</span>
+              <span style={{ flex: 1 }}><span style={{ display: 'block', fontSize: 14, fontWeight: 800 }}>Quinielas</span><span style={{ display: 'block', marginTop: 2, color: '#64748b', fontSize: 11 }}>Boletos, estadísticas e historial</span></span>
+              <span aria-hidden="true" style={{ fontSize: 14 }}>{seccionActiva.startsWith('quinielas') ? '⌄' : '›'}</span>
+            </button>
+            {seccionActiva.startsWith('quinielas') && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 10px 10px 60px' }}>
+                {([
+                  ['quinielas', 'Mis boletos'],
+                  ['quinielas-estadisticas', 'Estadísticas'],
+                  ['quinielas-historial', 'Historial'],
+                ] as const).map(([seccion, titulo]) => (
+                  <button key={seccion} onClick={() => { onCambiarSeccion(seccion); onCerrar(); }} aria-current={seccionActiva === seccion ? 'page' : undefined} style={{ border: 0, borderRadius: 8, padding: '9px 10px', background: seccionActiva === seccion ? '#fef3c7' : 'transparent', color: seccionActiva === seccion ? '#92400e' : '#475569', textAlign: 'left', fontWeight: seccionActiva === seccion ? 800 : 600, fontSize: 13, cursor: 'pointer' }}>
+                    {titulo}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* PIE DEL MENÚ LATERAL */}

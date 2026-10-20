@@ -982,7 +982,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
             <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
                 <button 
                     type="button"
-                    onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'normal'})}
+                    onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'normal', titulo: ''})}
                     style={{ 
                         flex: 1, padding: '8px 4px', borderRadius: '8px', border: nuevoEvento.tipo === 'normal' ? '2px solid #ef4444' : '1px solid #d1d5db', cursor: 'pointer',
                         backgroundColor: nuevoEvento.tipo === 'normal' ? '#fef2f2' : '#ffffff',
@@ -995,7 +995,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                 </button>
                 <button 
                     type="button"
-                    onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'trabajo', titulo: nuevoEvento.titulo || 'Turno de Trabajo'})}
+                    onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'trabajo', titulo: ''})}
                     style={{ 
                         flex: 1, padding: '8px 4px', borderRadius: '8px', border: nuevoEvento.tipo === 'trabajo' ? '2px solid #111827' : '1px solid #d1d5db', cursor: 'pointer',
                         backgroundColor: nuevoEvento.tipo === 'trabajo' ? '#f3f4f6' : '#ffffff',
@@ -1008,7 +1008,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                 </button>
                 <button 
                     type="button"
-                    onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'repetir'})}
+                    onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'repetir', titulo: ''})}
                     style={{ 
                         flex: 1, padding: '8px 4px', borderRadius: '8px', border: nuevoEvento.tipo === 'repetir' ? '2px solid #0047b3' : '1px solid #d1d5db', cursor: 'pointer',
                         backgroundColor: nuevoEvento.tipo === 'repetir' ? '#eff6ff' : '#ffffff',
@@ -1126,19 +1126,37 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
               </div>
             )}
 
-            <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
-              Título:
-            </label>
-            <input 
-              type="text" 
-              placeholder={nuevoEvento.tipo === 'repetir' ? "Ej: Natación, Fútbol, Inglés..." : "Ej: Cena, Dentista..."} 
-              value={nuevoEvento.titulo}
-              onChange={(e) => setNuevoEvento({...nuevoEvento, titulo: e.target.value})}
-              style={{ 
-                width: "100%", padding: "10px", marginBottom: "14px", borderRadius: "8px", 
-                border: "1px solid #d1d5db", backgroundColor: "#ffffff", color: "#111827", fontSize: "14px", outline: "none" 
-              }}
-            />
+            {nuevoEvento.tipo === 'trabajo' ? (
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+                {['Mañana', 'Tarde'].map((turno) => (
+                  <button
+                    key={turno}
+                    type="button"
+                    aria-pressed={nuevoEvento.titulo === turno}
+                    onClick={() => setNuevoEvento({ ...nuevoEvento, titulo: turno })}
+                    style={{ flex: 1, padding: '10px', borderRadius: '8px', border: nuevoEvento.titulo === turno ? '2px solid #111827' : '1px solid #d1d5db', backgroundColor: nuevoEvento.titulo === turno ? '#f3f4f6' : '#ffffff', color: '#111827', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}
+                  >
+                    {turno}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
+                  Título:
+                </label>
+                <input
+                  type="text"
+                  placeholder={nuevoEvento.tipo === 'repetir' ? "Ej: Natación, Fútbol, Inglés..." : "Ej: Cena, Dentista..."}
+                  value={nuevoEvento.titulo}
+                  onChange={(e) => setNuevoEvento({...nuevoEvento, titulo: e.target.value})}
+                  style={{
+                    width: "100%", padding: "10px", marginBottom: "14px", borderRadius: "8px",
+                    border: "1px solid #d1d5db", backgroundColor: "#ffffff", color: "#111827", fontSize: "14px", outline: "none"
+                  }}
+                />
+              </>
+            )}
             
             {/* INPUTS DE HORA SEGÚN TIPO */}
             {(nuevoEvento.tipo === 'normal' || (nuevoEvento.tipo === 'repetir' && categoriaRepeticion === 'normal')) ? (

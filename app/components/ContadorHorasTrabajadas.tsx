@@ -212,6 +212,7 @@ function agruparPorDia(lista: TurnoDetallado[]): GrupoDia[] {
 
 export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorHorasTrabajadasProps) {
   const [fechaReferencia, setFechaReferencia] = useState<Date>(new Date());
+  const [personaActiva, setPersonaActiva] = useState<'joel' | 'ana'>('joel');
   const [eventos, setEventos] = useState<Record<string, unknown[]>>({});
   const [cargando, setCargando] = useState<boolean>(true);
 
@@ -336,10 +337,8 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
     };
   }, [diasDeLaSemana, eventos]);
 
-  const totalHorasFamiliares = Math.round((totalHorasJoel + totalHorasAna) * 100) / 100;
   const horasJoelFmt = formatearHorasYMinutos(totalHorasJoel);
   const horasAnaFmt = formatearHorasYMinutos(totalHorasAna);
-  const horasFamiliaFmt = formatearHorasYMinutos(totalHorasFamiliares);
 
   // Formato del rango de fechas de la cabecera: ej. "12 oct - 18 oct 2026"
   const textoRangoSemana = `${lunesSemana.getDate()} ${MESES_CORTOS[lunesSemana.getMonth()]} - ${domingoSemana.getDate()} ${MESES_CORTOS[domingoSemana.getMonth()]} ${domingoSemana.getFullYear()}`;
@@ -464,68 +463,42 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
         </div>
       </div>
 
-      {/* RESUMEN TOTAL FAMILIAR SEMANAL */}
-      <div style={{
-        background: 'linear-gradient(135deg, #0047b3 0%, #002e73 100%)',
-        color: '#ffffff',
-        borderRadius: '18px',
-        padding: '16px 18px',
-        boxShadow: '0 8px 20px rgba(0, 71, 179, 0.22)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.8px', color: 'rgba(255, 255, 255, 0.75)', fontWeight: 800 }}>
-              Cómputo Familiar de la Semana
-            </div>
-            <div style={{ fontSize: '26px', fontWeight: 900, lineHeight: 1.2, marginTop: '2px' }}>
-              {horasFamiliaFmt.texto}
-              <span style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255, 255, 255, 0.82)', marginLeft: '8px' }}>
-                ({horasFamiliaFmt.decimal})
-              </span>
-            </div>
-          </div>
-          <div style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: '14px',
-            backgroundColor: 'rgba(255, 255, 255, 0.16)',
-            border: '1px solid rgba(255, 255, 255, 0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '24px',
-            flexShrink: 0
-          }}>
-            💼
-          </div>
-        </div>
-
-        <div style={{
-          display: 'flex',
-          gap: '12px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.18)',
-          paddingTop: '8px',
-          fontSize: '12px',
-          fontWeight: 600
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#60a5fa' }} />
-            <span>Joel: <strong>{horasJoelFmt.texto}</strong></span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f87171' }} />
-            <span>Ana: <strong>{horasAnaFmt.texto}</strong></span>
-          </div>
-        </div>
-      </div>
-
       {/* 3. CASILLAS Y TARJETAS SEPARADAS PARA JOEL Y ANA */}
 
+      <div role="tablist" aria-label="Persona" style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
+        {(['joel', 'ana'] as const).map((persona) => {
+          const activa = personaActiva === persona;
+          const esJoel = persona === 'joel';
+          return (
+            <button
+              key={persona}
+              id={`pestana-horas-${persona}`}
+              type="button"
+              role="tab"
+              aria-selected={activa}
+              aria-controls="panel-horas-trabajadas"
+              onClick={() => setPersonaActiva(persona)}
+              style={{
+                flex: 1,
+                padding: '10px 14px',
+                border: `1px solid ${activa ? (esJoel ? '#bfdbfe' : '#fecaca') : '#e2e8f0'}`,
+                borderRadius: '10px 10px 0 0',
+                backgroundColor: activa ? (esJoel ? '#eff6ff' : '#fff1f2') : '#ffffff',
+                color: activa ? (esJoel ? '#0047b3' : '#b91c1c') : '#64748b',
+                fontSize: '14px',
+                fontWeight: activa ? 800 : 700,
+                cursor: 'pointer'
+              }}
+            >
+              {esJoel ? 'Joel' : 'Ana'}
+            </button>
+          );
+        })}
+      </div>
+
       {/* TARJETA 1: CASILLA DE JOEL ("J") */}
-      <div style={{
+      {personaActiva === 'joel' && (
+      <div role="tabpanel" id="panel-horas-trabajadas" aria-labelledby="pestana-horas-joel" style={{
         backgroundColor: '#ffffff',
         borderRadius: '18px',
         border: '1px solid #bfdbfe',
@@ -734,9 +707,11 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
           )}
         </div>
       </div>
+      )}
 
       {/* TARJETA 2: CASILLA DE ANA ("A") */}
-      <div style={{
+      {personaActiva === 'ana' && (
+      <div role="tabpanel" id="panel-horas-trabajadas" aria-labelledby="pestana-horas-ana" style={{
         backgroundColor: '#ffffff',
         borderRadius: '18px',
         border: '1px solid #fecaca',
@@ -925,6 +900,7 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
           )}
         </div>
       </div>
+      )}
 
       {/* BOTÓN RÁPIDO PARA IR A LA AGENDA */}
       {onIrAPlanificador && (

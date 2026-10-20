@@ -6,9 +6,10 @@ import CalendarioSemanal from './components/CalendarioSemanal';
 import HeaderSofascore from './components/HeaderSofascore';
 import CalendarioDeportes from './components/CalendarioDeportes';
 import MenuEscolarAlma from './components/MenuEscolarAlma';
-import MenuLateral from './components/MenuLateral';
+import MenuLateral, { type SeccionPrincipal } from './components/MenuLateral';
 import FinanzasFamiliares from './components/FinanzasFamiliares';
 import ListaCompra from './components/ListaCompra';
+import Quinielas from './components/Quinielas';
 import ModalNovedades from './components/ModalNovedades';
 import ModalVersion from './components/ModalVersion';
 import { auth, db } from './firebase';
@@ -35,7 +36,7 @@ const CORREOS_AUTORIZADOS = [
 export default function Home() {
   const [usuario, setUsuario] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [seccionPrincipal, setSeccionPrincipal] = useState<'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas'>('planificador');
+  const [seccionPrincipal, setSeccionPrincipal] = useState<SeccionPrincipal>('planificador');
   const [menuLateralAbierto, setMenuLateralAbierto] = useState<boolean>(false);
   const [modalVersionAbierto, setModalVersionAbierto] = useState<boolean>(false);
   const [tabActiva, setTabActiva] = useState<string>('general');
@@ -169,6 +170,7 @@ export default function Home() {
           seccionActiva={seccionPrincipal}
           onCambiarSeccion={(seccion) => {
             setSeccionPrincipal(seccion);
+            if (seccion === 'planificador') setTabActiva('general');
           }}
           usuario={usuario}
           onCerrarSesion={cerrarSesion}
@@ -213,7 +215,9 @@ export default function Home() {
             padding: "0 16px 40px 16px"
           }}
         >
-          {seccionPrincipal === 'finanzas' ? (
+          {seccionPrincipal === 'quinielas' || seccionPrincipal === 'quinielas-estadisticas' || seccionPrincipal === 'quinielas-historial' ? (
+            <Quinielas vista={seccionPrincipal === 'quinielas-estadisticas' ? 'estadisticas' : seccionPrincipal === 'quinielas-historial' ? 'historial' : 'boletos'} usuario={usuario} />
+          ) : seccionPrincipal === 'finanzas' ? (
             <FinanzasFamiliares usuario={usuario} />
           ) : seccionPrincipal === 'lista-compra' ? (
             <ListaCompra 

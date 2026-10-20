@@ -1,6 +1,8 @@
 "use client";
 import React from 'react';
+import Image from 'next/image';
 import { formatearNombreFamiliar } from '../utils/actividad';
+import type { SeccionPrincipal } from './MenuLateral';
 
 export interface TabItem {
   id: string;
@@ -18,8 +20,8 @@ interface HeaderSofascoreProps {
   onTabChange: (tabId: string) => void;
   tabs?: TabItem[];
   onAbrirMenuLateral?: () => void;
-  seccionActiva?: 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas';
-  onCambiarSeccion?: (seccion: 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas') => void;
+  seccionActiva?: SeccionPrincipal;
+  onCambiarSeccion?: (seccion: SeccionPrincipal) => void;
 }
 
 const DEFAULT_TABS: TabItem[] = [
@@ -106,22 +108,21 @@ export default function HeaderSofascore({
               </button>
             )}
 
-            <div style={{
-              width: '34px',
-              height: '34px',
-              backgroundColor: '#ffffff',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
-              fontWeight: 800,
-              fontSize: '18px',
-              color: '#0047b3',
-              flexShrink: 0
-            }}>
-              PF
-            </div>
+            <Image
+              src="/icon.png"
+              alt="Logo de Planificador Familiar"
+              width={34}
+              height={34}
+              style={{
+                width: '34px',
+                height: '34px',
+                objectFit: 'contain',
+                backgroundColor: '#ffffff',
+                borderRadius: '8px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                flexShrink: 0
+              }}
+            />
             <div>
               <h1 style={{
                 margin: 0,
@@ -332,6 +333,16 @@ export default function HeaderSofascore({
                 <span>← Volver</span>
               </button>
             )}
+          </div>
+        </div>
+      ) : seccionActiva === 'quinielas' || seccionActiva === 'quinielas-estadisticas' || seccionActiva === 'quinielas-historial' ? (
+        <div style={{ backgroundColor: '#fffbeb', borderBottom: '1px solid #fde68a', display: 'flex', justifyContent: 'center', width: '100%', padding: '10px 16px' }}>
+          <div style={{ width: '100%', maxWidth: '500px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>🎟️</span>
+              <div><span style={{ display: 'block', fontSize: 14, fontWeight: 800, color: '#92400e' }}>Quinielas</span><span style={{ display: 'block', fontSize: 11, color: '#64748b' }}>{seccionActiva === 'quinielas-estadisticas' ? 'Estadísticas' : seccionActiva === 'quinielas-historial' ? 'Historial' : 'Mis boletos'}</span></div>
+            </div>
+            {onCambiarSeccion && <button onClick={() => onCambiarSeccion('planificador')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12, fontWeight: 700, backgroundColor: '#fff', color: '#0047b3', border: '1px solid #bfdbfe', borderRadius: 8, cursor: 'pointer' }}>📅 Ver Agenda</button>}
           </div>
         </div>
       ) : (

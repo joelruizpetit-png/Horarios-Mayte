@@ -87,7 +87,13 @@ export default function MenuEscolarAlma({
   const [observaciones, setObservaciones] = useState<string>('');
   const [guardando, setGuardando] = useState<boolean>(false);
   const [mensajeToast, setMensajeToast] = useState<string | null>(null);
-  const [sincronizandoOctubre, setSincronizandoOctubre] = useState<boolean>(false);
+
+  const mostrarNotificacion = (texto: string) => {
+    setMensajeToast(texto);
+    setTimeout(() => {
+      setMensajeToast(null);
+    }, 3200);
+  };
 
   // Sincronización automática de octubre 2026 en Firestore al iniciar sesión
   useEffect(() => {
@@ -102,25 +108,6 @@ export default function MenuEscolarAlma({
       });
     }
   }, [usuario?.email]);
-
-  const manejarSincronizarOctubre = async () => {
-    setSincronizandoOctubre(true);
-    try {
-      const email = usuario?.email || 'admin@planificador';
-      const res = await sincronizarMenuOctubreFirestore(db, email);
-      if (res.exito) {
-        localStorage.setItem('menu_octubre_2026_sincronizado_v1_3_0', 'true');
-        mostrarNotificacion(`✓ ${res.total} menús escolares de octubre cargados en Firestore`);
-      } else {
-        alert("Hubo un error al guardar los menús en Firestore.");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Error al sincronizar el menú de octubre.");
-    } finally {
-      setSincronizandoOctubre(false);
-    }
-  };
 
   // Suscripción en tiempo real a la colección aislada en Firestore: 'menu_escolar_alma'
   useEffect(() => {
@@ -179,13 +166,6 @@ export default function MenuEscolarAlma({
     if (onFechaChange) {
       onFechaChange(hoyActual);
     }
-  };
-
-  const mostrarNotificacion = (texto: string) => {
-    setMensajeToast(texto);
-    setTimeout(() => {
-      setMensajeToast(null);
-    }, 3200);
   };
 
   // Abrir modal para crear o editar
@@ -338,31 +318,6 @@ export default function MenuEscolarAlma({
           </div>
         </div>
 
-        <button
-          onClick={manejarSincronizarOctubre}
-          disabled={sincronizandoOctubre}
-          title="Sincronizar los 22 días lectivos de octubre de Alma en Firestore (menu_escolar y menu_escolar_alma)"
-          style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.2)',
-            color: '#ffffff',
-            border: '1px solid rgba(255, 255, 255, 0.4)',
-            borderRadius: '8px',
-            padding: '7px 12px',
-            fontSize: '11px',
-            fontWeight: 800,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            transition: 'all 0.15s ease',
-            whiteSpace: 'nowrap',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-          }}
-          onMouseOver={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)')}
-          onMouseOut={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)')}
-        >
-          {sincronizandoOctubre ? '⏳ Guardando...' : '📥 Guardar en Firestore'}
-        </button>
       </div>
 
       {/* BARRA DE NAVEGACIÓN SEMANAL (LUNES A VIERNES) */}

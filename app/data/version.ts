@@ -1,6 +1,6 @@
 // app/data/version.ts
 
-export const APP_VERSION = "1.4.2";
+export const APP_VERSION = "1.4.3";
 
 export interface ItemNovedadVersion {
   icono: string;
@@ -23,6 +23,14 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
   lema: "OS Familiar de Ana, Joel y Alma",
   fecha: "Octubre 2026",
   items: [
+    {
+      icono: "🎟️",
+      titulo: "Nueva sección de Quinielas",
+      descripcion: "Crea boletos a partir de una captura o foto con reconocimiento de texto, revisa los partidos y pronósticos 1/X/2 y marca los resultados. Consulta partidos acertados y fallados, total apostado, cuota media y beneficio o pérdida acumulados.",
+      badge: "Nueva Sección",
+      badgeColor: "#92400e",
+      badgeBg: "#fef3c7"
+    },
     {
       icono: "🔐",
       titulo: "Autenticación Google Calendar: sin pantalla de advertencia",
@@ -89,8 +97,8 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
     },
     {
       icono: "🚀",
-      titulo: "¡Bienvenido a AJA v1.4.2!",
-      descripcion: "Flujo de autenticación Google Calendar corregido: refresh_token persistente, renovación silenciosa con margen preciso y eliminación de la pantalla de advertencia en reconexiones. También incluye el desglose diario de turnos, el Contador de Horas Trabajadas y el logo de Condis.",
+      titulo: "¡Bienvenido a AJA v1.4.3!",
+      descripcion: "Nueva sección Quinielas con importación de fotos y capturas, seguimiento de aciertos y estadísticas de apuestas. También incluye mejoras de Google Calendar, turnos y horas trabajadas.",
       badge: "Nueva Versión",
       badgeColor: "#0047b3",
       badgeBg: "#eff6ff"
