@@ -141,9 +141,9 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const [cargando, setCargando] = useState(true);
   const [nombre, setNombre] = useState('');
   const [fecha, setFecha] = useState(hoy);
-  const [importe, setImporte] = useState('');
-  const [cuota, setCuota] = useState('');
-  const [gananciaPotencial, setGananciaPotencial] = useState('');
+  const [importe, setImporte] = useState('0.00');
+  const [cuota, setCuota] = useState('0.00');
+  const [gananciaPotencial, setGananciaPotencial] = useState('0.00');
   const [saldoInicial, setSaldoInicial] = useState('0.00');
   const [partidos, setPartidos] = useState<PartidoQuiniela[]>([]);
   const [textoOCR, setTextoOCR] = useState('');
@@ -320,7 +320,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
         creadoEn: new Date().toISOString(),
         creadorEmail: usuario?.email || '',
       });
-      setNombre(''); setFecha(hoy()); setImporte(''); setCuota(''); setGananciaPotencial(''); setPartidos([]); setTextoOCR(''); setMensaje('Boleto guardado.');
+      setNombre(''); setFecha(hoy()); setImporte('0.00'); setCuota('0.00'); setGananciaPotencial('0.00'); setPartidos([]); setTextoOCR(''); setMensaje('Boleto guardado.');
     } catch (error) {
       console.error('No se pudo guardar el boleto:', error);
       setMensaje('No se pudo guardar el boleto. Comprueba la conexión e inténtalo de nuevo.');
@@ -442,16 +442,16 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
               </div>
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 10, padding: '10px 14px', background: '#eff6ff', color: '#0047b3', fontWeight: 750, fontSize: 13, cursor: 'pointer' }}>
                 {leyendoFoto ? 'Leyendo imagen…' : '📷 Capturas o fotos'}
-                <input type="file" accept="image/*" capture="environment" multiple onChange={procesarFoto} disabled={leyendoFoto} style={{ display: 'none' }} />
+                <input type="file" accept="image/*" multiple onChange={procesarFoto} disabled={leyendoFoto} style={{ display: 'none' }} />
               </label>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10, marginTop: 16 }}>
               <label style={labelStyle}>Nombre del boleto<input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Por ejemplo: Jornada 12" style={inputStyle} /></label>
               <label style={labelStyle}>Fecha<input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={inputStyle} /></label>
-              <label style={labelStyle}>Cantidad apostada (€)<input inputMode="decimal" type="number" min="0.01" step="0.01" value={importe} onChange={(e) => { const valor = e.target.value; setImporte(valor); const apuesta = numeroOCR(valor); const cuotaActual = numeroOCR(cuota); setGananciaPotencial(apuesta && cuotaActual ? (apuesta * cuotaActual).toFixed(2) : ''); }} placeholder="5,00" style={inputStyle} required /></label>
-              <label style={labelStyle}>Cuota combinada<input inputMode="decimal" type="number" min="0.01" step="0.01" value={cuota} onChange={(e) => { const valor = e.target.value; setCuota(valor); const apuesta = numeroOCR(importe); const cuotaNueva = numeroOCR(valor); setGananciaPotencial(apuesta && cuotaNueva ? (apuesta * cuotaNueva).toFixed(2) : ''); }} placeholder="12,50" style={inputStyle} required /></label>
-              <label style={labelStyle}>Ganancia potencial (€)<input inputMode="decimal" type="number" min="0.01" step="0.01" value={gananciaPotencial} onChange={(e) => setGananciaPotencial(e.target.value)} placeholder="2,37" style={inputStyle} required /></label>
+              <label style={labelStyle}>Cantidad apostada (€)<input inputMode="decimal" type="number" min="0.01" step="0.01" value={importe} onFocus={(e) => e.currentTarget.select()} onBlur={(e) => { if (!e.currentTarget.value) setImporte('0.00'); }} onChange={(e) => { const valor = e.target.value; setImporte(valor); const apuesta = numeroOCR(valor); const cuotaActual = numeroOCR(cuota); setGananciaPotencial(apuesta && cuotaActual ? (apuesta * cuotaActual).toFixed(2) : '0.00'); }} placeholder="0,00" style={inputStyle} required /></label>
+              <label style={labelStyle}>Cuota combinada<input inputMode="decimal" type="number" min="0.01" step="0.01" value={cuota} onFocus={(e) => e.currentTarget.select()} onBlur={(e) => { if (!e.currentTarget.value) setCuota('0.00'); }} onChange={(e) => { const valor = e.target.value; setCuota(valor); const apuesta = numeroOCR(importe); const cuotaNueva = numeroOCR(valor); setGananciaPotencial(apuesta && cuotaNueva ? (apuesta * cuotaNueva).toFixed(2) : '0.00'); }} placeholder="0,00" style={inputStyle} required /></label>
+              <label style={labelStyle}>Ganancia potencial (€)<input inputMode="decimal" type="number" min="0.01" step="0.01" value={gananciaPotencial} onFocus={(e) => e.currentTarget.select()} onBlur={(e) => { if (!e.currentTarget.value) setGananciaPotencial('0.00'); }} onChange={(e) => setGananciaPotencial(e.target.value)} placeholder="0,00" style={inputStyle} required /></label>
               <label style={labelStyle}>Saldo inicial (€)<input aria-label="Saldo inicial (€)" inputMode="decimal" type="number" min="0" step="0.01" value={saldoInicial} onChange={(e) => setSaldoInicial(e.target.value)} onBlur={guardarSaldoInicial} placeholder="0,00" style={inputStyle} /></label>
               <label style={labelStyle}>Saldo acumulado (€)<input aria-label="Saldo acumulado (€)" type="text" inputMode="decimal" value={euros(saldosPorBoleto.actual)} readOnly style={{ ...inputStyle, background: '#f8fafc', color: saldosPorBoleto.actual >= saldoInicialNumero ? '#15803d' : '#b91c1c', fontWeight: 800 }} /></label>
             </div>
