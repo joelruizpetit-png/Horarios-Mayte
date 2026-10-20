@@ -331,6 +331,18 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     }
   };
 
+  const eliminarPartido = (partidoId: string) => {
+    const restantes = partidos.filter((partido) => partido.id !== partidoId);
+    setPartidos(restantes);
+    if (!restantes.some((partido) => partido.local.trim() && partido.visitante.trim())) {
+      setImporte('0.00');
+      setCuota('0.00');
+      setGananciaPotencial('0.00');
+      setTextoOCR('');
+      setMensaje('');
+    }
+  };
+
   const cambiarResultado = async (boleto: BoletoQuiniela, partidoId: string, resultado: Resultado) => {
     const actualizados = boleto.partidos.map((partido) => partido.id === partidoId ? { ...partido, resultado } : partido);
     try {
@@ -369,6 +381,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
 
   const importeNumero = Number(importe.replace(',', '.')) || 0;
   const gananciaNumero = Number(gananciaPotencial.replace(',', '.')) || 0;
+  const hayPartidosActivos = partidos.some((partido) => partido.local.trim() && partido.visitante.trim());
 
   return (
     <section style={{ width: '100%', maxWidth: 760, margin: '24px auto 0', paddingBottom: 30 }}>
@@ -481,7 +494,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr) 36px', alignItems: 'center', gap: 7 }}>
                       <input aria-label={`Equipo local del partido ${indice + 1}`} value={partido.local} onChange={(e) => setPartidos((actuales) => actuales.map((item) => item.id === partido.id ? { ...item, local: e.target.value } : item))} placeholder="Equipo local" style={inputStyle} />
                       <input aria-label={`Equipo visitante del partido ${indice + 1}`} value={partido.visitante} onChange={(e) => setPartidos((actuales) => actuales.map((item) => item.id === partido.id ? { ...item, visitante: e.target.value } : item))} placeholder="Equipo visitante" style={inputStyle} />
-                      <button type="button" aria-label={`Quitar partido ${indice + 1}`} onClick={() => setPartidos((actuales) => actuales.filter((item) => item.id !== partido.id))} style={{ border: 0, background: '#fef2f2', color: '#b91c1c', borderRadius: 8, height: 38, fontSize: 17, cursor: 'pointer' }}>×</button>
+                      <button type="button" aria-label={`Quitar partido ${indice + 1}`} onClick={() => eliminarPartido(partido.id)} style={{ border: 0, background: '#fef2f2', color: '#b91c1c', borderRadius: 8, height: 38, fontSize: 17, cursor: 'pointer' }}>×</button>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 8, flexWrap: 'wrap' }}>
                       {(['1', 'X', '2'] as Pronostico[]).map((opcion) => <label key={opcion} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: partido.pronostico.includes(opcion) ? '#eff6ff' : '#f8fafc', border: `1px solid ${partido.pronostico.includes(opcion) ? '#93c5fd' : '#e2e8f0'}`, borderRadius: 8, padding: '6px 10px', color: '#1e3a8a', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
@@ -497,7 +510,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
             )}
 
             {mensaje && <div role="status" style={{ marginTop: 12, color: mensaje.includes('no se pudo') || mensaje.includes('No se pudo') ? '#b91c1c' : '#1d4ed8', fontSize: 13 }}>{mensaje}</div>}
-            <button type="submit" disabled={guardando || leyendoFoto} style={{ ...primaryButtonStyle, marginTop: 16, opacity: guardando || leyendoFoto ? 0.65 : 1 }}>{guardando ? 'Guardando…' : 'Guardar boleto'}</button>
+            <button type="submit" disabled={guardando || leyendoFoto || !hayPartidosActivos} style={{ ...primaryButtonStyle, marginTop: 16, opacity: guardando || leyendoFoto || !hayPartidosActivos ? 0.5 : 1, cursor: guardando || leyendoFoto || !hayPartidosActivos ? 'not-allowed' : 'pointer' }}>{guardando ? 'Guardando…' : 'Guardar boleto'}</button>
           </form>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '24px 2px 10px' }}>
