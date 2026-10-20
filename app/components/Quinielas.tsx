@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import React, { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { addDoc, collection, doc, onSnapshot, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -147,6 +147,8 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const [saldoInicial, setSaldoInicial] = useState('0.00');
   const [partidos, setPartidos] = useState<PartidoQuiniela[]>([]);
   const [textoOCR, setTextoOCR] = useState('');
+  const entradaCamaraRef = useRef<HTMLInputElement>(null);
+  const entradaCapturasRef = useRef<HTMLInputElement>(null);
   const [leyendoFoto, setLeyendoFoto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState('');
@@ -440,10 +442,16 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                 <div style={{ color: '#0f172a', fontSize: 18, fontWeight: 800 }}>Añadir boleto</div>
                 <div style={{ color: '#64748b', fontSize: 12, marginTop: 3 }}>Puedes leer una captura o foto, y corregir los datos antes de guardar.</div>
               </div>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 10, padding: '10px 14px', background: '#eff6ff', color: '#0047b3', fontWeight: 750, fontSize: 13, cursor: 'pointer' }}>
-                {leyendoFoto ? 'Leyendo imagen…' : '📷 Capturas o fotos'}
-                <input type="file" accept="image/*" multiple onChange={procesarFoto} disabled={leyendoFoto} style={{ display: 'none' }} />
-              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <input ref={entradaCamaraRef} type="file" accept="image/*" capture="environment" onChange={procesarFoto} disabled={leyendoFoto} style={{ display: 'none' }} />
+                <input ref={entradaCapturasRef} type="file" accept="image/*" multiple onChange={procesarFoto} disabled={leyendoFoto} style={{ display: 'none' }} />
+                <button type="button" onClick={() => entradaCamaraRef.current?.click()} disabled={leyendoFoto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', background: '#eff6ff', color: '#0047b3', fontWeight: 750, fontSize: 13, cursor: leyendoFoto ? 'wait' : 'pointer', opacity: leyendoFoto ? 0.65 : 1 }}>
+                  {leyendoFoto ? 'Leyendo imagen…' : '📷 Hacer foto'}
+                </button>
+                <button type="button" onClick={() => entradaCapturasRef.current?.click()} disabled={leyendoFoto} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', background: '#eff6ff', color: '#0047b3', fontWeight: 750, fontSize: 13, cursor: leyendoFoto ? 'wait' : 'pointer', opacity: leyendoFoto ? 0.65 : 1 }}>
+                  {leyendoFoto ? 'Leyendo imagen…' : '🖼️ Subir capturas'}
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10, marginTop: 16 }}>
