@@ -1,7 +1,7 @@
 "use client";
 
 import React, { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { addDoc, collection, doc, onSnapshot, runTransaction, setDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 type Pronostico = '1' | 'X' | '2';
@@ -164,6 +164,8 @@ function extraerPartidos(texto: string): PartidoQuiniela[] {
 export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const [boletos, setBoletos] = useState<BoletoQuiniela[]>([]);
   const [boletosArchivados, setBoletosArchivados] = useState<BoletoQuiniela[]>([]);
+  const [boletosAbiertos, setBoletosAbiertos] = useState<Set<string>>(() => new Set());
+  const [boletosHistorialAbiertos, setBoletosHistorialAbiertos] = useState<Set<string>>(() => new Set());
   const [cargando, setCargando] = useState(true);
   const [nombre, setNombre] = useState('');
   const [fecha, setFecha] = useState(hoy);
@@ -415,23 +417,32 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     }
   };
 
-  const borrarBoleto = async (boleto: BoletoQuiniela) => {
-    if (!window.confirm(`¿Eliminar el boleto «${boleto.nombre}»?`)) return;
+  const guardarEnHistorial = async (boleto: BoletoQuiniela) => {
+    if (!window.confirm(`¿Guardar el boleto «${boleto.nombre}» en el historial? Dejará de aparecer en Mis boletos y seguirá contando en las estadísticas.`)) return;
     try {
-      const referencia = doc(db, COLECCION, boleto.id);
-      await runTransaction(db, async (transaccion) => {
-        const registro = await transaccion.get(referencia);
-        if (!registro.exists()) return;
-        const datos = registro.data();
-        const resultados = (datos.partidos || []) as PartidoQuiniela[];
-        const resuelto = resultados.length > 0 && (resultados.some((partido) => partido.resultado === 'fallado') || resultados.every((partido) => partido.resultado === 'acertado'));
-        if (resuelto) transaccion.update(referencia, { archivado: true, archivadoEn: new Date().toISOString() });
-        else transaccion.delete(referencia);
-      });
+      await updateDoc(doc(db, COLECCION, boleto.id), { archivado: true, archivadoEn: new Date().toISOString() });
     } catch (error) {
-      console.error('No se pudo eliminar el boleto:', error);
-      setMensaje('No se pudo eliminar el boleto ni guardar su resultado en las estadísticas.');
+      console.error('No se pudo guardar el boleto en el historial:', error);
+      setMensaje('No se pudo guardar el boleto en el historial. Comprueba la conexión e inténtalo de nuevo.');
     }
+  };
+
+  const alternarBoleto = (boletoId: string) => {
+    setBoletosAbiertos((actuales) => {
+      const siguientes = new Set(actuales);
+      if (siguientes.has(boletoId)) siguientes.delete(boletoId);
+      else siguientes.add(boletoId);
+      return siguientes;
+    });
+  };
+
+  const alternarBoletoHistorial = (boletoId: string) => {
+    setBoletosHistorialAbiertos((actuales) => {
+      const siguientes = new Set(actuales);
+      if (siguientes.has(boletoId)) siguientes.delete(boletoId);
+      else siguientes.add(boletoId);
+      return siguientes;
+    });
   };
 
   const tarjeta = (etiqueta: string, valor: string, color: string, fondo: string) => (
@@ -449,46 +460,50 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     <section style={{ width: '100%', maxWidth: 760, margin: '24px auto 0', paddingBottom: 30 }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ color: '#0047b3', fontSize: 24, fontWeight: 850 }}>🎟️ {vista === 'boletos' ? 'Quinielas' : vista === 'estadisticas' ? 'Estadísticas de quinielas' : 'Historial de quinielas'}</div>
-        <div style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>{vista === 'boletos' ? 'Guarda tus combinaciones y sigue los resultados.' : vista === 'estadisticas' ? 'Resumen de partidos, apuestas y balance acumulado.' : 'Consulta los boletos concluidos que has eliminado de la lista.'}</div>
+        <div style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>{vista === 'boletos' ? 'Guarda tus combinaciones y sigue los resultados.' : vista === 'estadisticas' ? 'Resumen de partidos, apuestas y balance acumulado.' : 'Consulta los boletos que has guardado en el historial.'}</div>
       </div>
 
       {vista === 'historial' ? (
         cargando ? (
           <div style={{ textAlign: 'center', color: '#64748b', padding: 24 }}>Cargando historial…</div>
         ) : boletosArchivados.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 28 }}>Todavía no hay boletos concluidos en el historial.</div>
+          <div style={{ textAlign: 'center', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 28 }}>Todavía no hay boletos guardados en el historial.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
             {boletosArchivados.map((boleto) => {
               const importeBoleto = Number(boleto.importe) || 0;
               const cuotaBoleto = Number(boleto.cuota) || 0;
               const fallado = boleto.partidos.some((partido) => partido.resultado === 'fallado');
-              const estado = fallado ? 'Fallado' : 'Acertado';
-              const beneficio = fallado ? -importeBoleto : (Number(boleto.gananciaPotencial) || importeBoleto * cuotaBoleto) - importeBoleto;
+              const acertado = boleto.partidos.length > 0 && boleto.partidos.every((partido) => partido.resultado === 'acertado');
+              const estado = fallado ? 'Fallado' : acertado ? 'Acertado' : 'Pendiente';
+              const beneficio = fallado ? -importeBoleto : acertado ? (Number(boleto.gananciaPotencial) || importeBoleto * cuotaBoleto) - importeBoleto : null;
+              const abierto = boletosHistorialAbiertos.has(boleto.id);
               return (
                 <article key={boleto.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 15, padding: 15, boxShadow: '0 2px 8px rgba(15,23,42,.04)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{boleto.nombre}</div>
-                      <div style={{ color: '#64748b', fontSize: 12, marginTop: 3 }}>{new Date(`${boleto.fecha}T12:00:00`).toLocaleDateString('es-ES')} · {boleto.partidos.length} partidos</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <button type="button" onClick={() => alternarBoletoHistorial(boleto.id)} aria-expanded={abierto} aria-controls={`detalle-historial-${boleto.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flex: '1 1 180px', minWidth: 0, border: 0, padding: 0, background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+                      <span style={{ minWidth: 0 }}><span style={{ display: 'block', fontWeight: 800, fontSize: 16, color: '#0f172a', overflowWrap: 'anywhere' }}>{boleto.nombre}</span><span style={{ display: 'block', color: '#64748b', fontSize: 12, marginTop: 3 }}>{new Date(`${boleto.fecha}T12:00:00`).toLocaleDateString('es-ES')} · {boleto.partidos.length} partidos</span></span>
+                      <span aria-hidden="true" style={{ flexShrink: 0, color: '#64748b', fontSize: 22, lineHeight: 1 }}>{abierto ? '⌃' : '⌄'}</span>
+                    </button>
+                    <span style={{ borderRadius: 20, padding: '5px 10px', background: fallado ? '#fef2f2' : acertado ? '#f0fdf4' : '#fffbeb', color: fallado ? '#b91c1c' : acertado ? '#15803d' : '#a16207', fontWeight: 800, fontSize: 12 }}>{estado}</span>
+                  </div>
+                  {abierto && <div id={`detalle-historial-${boleto.id}`}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, background: '#f8fafc', borderRadius: 10, padding: 10, marginTop: 12, fontSize: 12, color: '#475569' }}>
+                      <span>Apostado: <strong>{euros(importeBoleto)}</strong></span>
+                      <span>Cuota: <strong>{cuotaBoleto.toFixed(2)}</strong></span>
+                      <span>Ganancia potencial: <strong>{euros(Number(boleto.gananciaPotencial) || importeBoleto * cuotaBoleto)}</strong></span>
+                      {beneficio !== null && <span>Balance: <strong style={{ color: beneficio >= 0 ? '#15803d' : '#b91c1c' }}>{euros(beneficio)}</strong></span>}
+                      {saldosPorBoleto.porBoleto[boleto.id] && <span>Saldo tras el boleto: <strong>{euros(saldosPorBoleto.porBoleto[boleto.id].acumulado)}</strong></span>}
                     </div>
-                    <span style={{ borderRadius: 20, padding: '5px 10px', background: fallado ? '#fef2f2' : '#f0fdf4', color: fallado ? '#b91c1c' : '#15803d', fontWeight: 800, fontSize: 12 }}>{estado}</span>
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, background: '#f8fafc', borderRadius: 10, padding: 10, marginTop: 12, fontSize: 12, color: '#475569' }}>
-                    <span>Apostado: <strong>{euros(importeBoleto)}</strong></span>
-                    <span>Cuota: <strong>{cuotaBoleto.toFixed(2)}</strong></span>
-                    <span>Ganancia potencial: <strong>{euros(Number(boleto.gananciaPotencial) || importeBoleto * cuotaBoleto)}</strong></span>
-                    <span>Balance: <strong style={{ color: beneficio >= 0 ? '#15803d' : '#b91c1c' }}>{euros(beneficio)}</strong></span>
-                    {saldosPorBoleto.porBoleto[boleto.id] && <span>Saldo tras el boleto: <strong>{euros(saldosPorBoleto.porBoleto[boleto.id].acumulado)}</strong></span>}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10 }}>
-                    {boleto.partidos.map((partido) => (
-                      <div key={partido.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 9, background: partido.resultado === 'acertado' ? '#f0fdf4' : partido.resultado === 'fallado' ? '#fef2f2' : '#f8fafc' }}>
-                        <span style={{ minWidth: 0, fontSize: 13, fontWeight: 700, color: '#1e293b', overflowWrap: 'anywhere' }}>{partido.local} – {partido.visitante}<span style={{ display: 'block', marginTop: 2, color: '#64748b', fontSize: 11 }}>Pronóstico: {normalizarPronostico(partido.pronostico).join(' + ') || 'Sin revisar'}</span></span>
-                        <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: partido.resultado === 'acertado' ? '#15803d' : partido.resultado === 'fallado' ? '#b91c1c' : '#64748b' }}>{partido.resultado === 'acertado' ? '✓ Acertado' : partido.resultado === 'fallado' ? '✕ Fallado' : 'Pendiente'}</span>
-                      </div>
-                    ))}
-                  </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10 }}>
+                      {boleto.partidos.map((partido) => (
+                        <div key={partido.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 9, background: partido.resultado === 'acertado' ? '#f0fdf4' : partido.resultado === 'fallado' ? '#fef2f2' : '#f8fafc' }}>
+                          <span style={{ minWidth: 0, fontSize: 13, fontWeight: 700, color: '#1e293b', overflowWrap: 'anywhere' }}>{partido.local} – {partido.visitante}<span style={{ display: 'block', marginTop: 2, color: '#64748b', fontSize: 11 }}>Pronóstico: {normalizarPronostico(partido.pronostico).join(' + ') || 'Sin revisar'}</span></span>
+                          <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 800, color: partido.resultado === 'acertado' ? '#15803d' : partido.resultado === 'fallado' ? '#b91c1c' : '#64748b' }}>{partido.resultado === 'acertado' ? '✓ Acertado' : partido.resultado === 'fallado' ? '✕ Fallado' : 'Pendiente'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>}
                 </article>
               );
             })}
@@ -542,12 +557,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
               <label style={labelStyle}>Ganancia potencial (€)<input inputMode="decimal" type="number" min="0.01" step="0.01" value={gananciaPotencial} onFocus={(e) => e.currentTarget.select()} onBlur={(e) => { if (!e.currentTarget.value) setGananciaPotencial('0.00'); }} onChange={(e) => setGananciaPotencial(e.target.value)} placeholder="0,00" style={inputStyle} required /></label>
               <label style={labelStyle}>Saldo inicial (€)<input aria-label="Saldo inicial (€)" inputMode="decimal" type="number" min="0" step="0.01" value={saldoInicial} onChange={(e) => setSaldoInicial(e.target.value)} onBlur={guardarSaldoInicial} placeholder="0,00" style={inputStyle} /></label>
               <label style={labelStyle}>Saldo acumulado (€)<input aria-label="Saldo acumulado (€)" type="text" inputMode="decimal" value={euros(saldosPorBoleto.actual)} readOnly style={{ ...inputStyle, background: '#f8fafc', color: saldosPorBoleto.actual >= saldoInicialNumero ? '#15803d' : '#b91c1c', fontWeight: 800 }} /></label>
-            </div>
-
-            <div style={{ marginTop: 14, background: '#f8fafc', borderRadius: 10, padding: '11px 13px', color: '#334155', fontSize: 13 }}>
-              Beneficio neto estimado si aciertas: <strong style={{ color: '#047857' }}>{euros(Math.max(0, gananciaNumero - importeNumero))}</strong>
-              <span style={{ color: '#64748b' }}> (la ganancia potencial indicada por el boleto incluye la apuesta)</span>
-              <div style={{ color: '#64748b', marginTop: 5 }}>El saldo acumulado descuenta las apuestas pendientes; al marcar un boleto como acertado suma el premio neto, y si es fallado descuenta la apuesta.</div>
+              <label style={labelStyle}>Beneficio neto estimado (€)<input aria-label="Beneficio neto estimado (€)" type="text" inputMode="decimal" value={euros(Math.max(0, gananciaNumero - importeNumero))} readOnly style={{ ...inputStyle, background: '#f8fafc', color: '#047857', fontWeight: 800 }} /></label>
             </div>
 
             {textoOCR && <details style={{ marginTop: 12 }}><summary style={{ cursor: 'pointer', color: '#475569', fontSize: 13 }}>Ver texto leído de la imagen</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: '#475569', fontSize: 12, background: '#f8fafc', padding: 10, borderRadius: 8 }}>{textoOCR}</pre></details>}
@@ -593,22 +603,28 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                 const completado = boleto.partidos.length > 0 && (perdido || boleto.partidos.every((partido) => partido.resultado === 'acertado'));
                 const estado = !completado ? 'Pendiente' : perdido ? 'Fallado' : 'Acertado';
                 const beneficioBoleto = !completado ? null : perdido ? -importeBoleto : importeBoleto * (cuotaBoleto - 1);
+                const abierto = boletosAbiertos.has(boleto.id);
                 return <article key={boleto.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 15, padding: 15, boxShadow: '0 2px 8px rgba(15,23,42,.04)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                    <div><div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{boleto.nombre}</div><div style={{ color: '#64748b', fontSize: 12, marginTop: 3 }}>{new Date(`${boleto.fecha}T12:00:00`).toLocaleDateString('es-ES')} · {boleto.partidos.length} partidos</div></div>
-                    <button type="button" onClick={() => borrarBoleto(boleto)} aria-label={`Eliminar ${boleto.nombre}`} style={{ border: 0, background: '#fef2f2', color: '#b91c1c', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>Eliminar</button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                    <button type="button" onClick={() => alternarBoleto(boleto.id)} aria-expanded={abierto} aria-controls={`detalle-boleto-${boleto.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flex: '1 1 180px', minWidth: 0, border: 0, padding: 0, background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+                      <span style={{ minWidth: 0 }}><span style={{ display: 'block', fontWeight: 800, fontSize: 16, color: '#0f172a', overflowWrap: 'anywhere' }}>{boleto.nombre}</span><span style={{ display: 'block', color: '#64748b', fontSize: 12, marginTop: 3 }}>{new Date(`${boleto.fecha}T12:00:00`).toLocaleDateString('es-ES')} · {boleto.partidos.length} partidos</span></span>
+                      <span aria-hidden="true" style={{ flexShrink: 0, color: '#64748b', fontSize: 22, lineHeight: 1 }}>{abierto ? '⌃' : '⌄'}</span>
+                    </button>
+                    <button type="button" onClick={() => guardarEnHistorial(boleto)} aria-label={`Guardar ${boleto.nombre} en Historial`} style={{ flex: '0 0 auto', border: 0, background: '#eff6ff', color: '#0047b3', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 750 }}>Guardar en Historial</button>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, background: '#f8fafc', borderRadius: 10, padding: 10, marginTop: 12, fontSize: 12, color: '#475569' }}>
-                    <span>Apostado: <strong>{euros(importeBoleto)}</strong></span><span>Cuota: <strong>{cuotaBoleto.toFixed(2)}</strong></span><span>Ganancia potencial: <strong>{euros(Number(boleto.gananciaPotencial) || importeBoleto * cuotaBoleto)}</strong></span><span>Estado: <strong style={{ color: estado === 'Acertado' ? '#15803d' : estado === 'Fallado' ? '#b91c1c' : '#a16207' }}>{estado}</strong></span>{beneficioBoleto !== null && <span>Balance: <strong style={{ color: beneficioBoleto >= 0 ? '#15803d' : '#b91c1c' }}>{euros(beneficioBoleto)}</strong></span>}{saldosPorBoleto.porBoleto[boleto.id] && <><span>Saldo inicial: <strong>{euros(saldosPorBoleto.porBoleto[boleto.id].inicial)}</strong></span><span>Saldo acumulado: <strong>{euros(saldosPorBoleto.porBoleto[boleto.id].acumulado)}</strong></span></>}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10 }}>
-                    {boleto.partidos.map((partido) => <div key={partido.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'center', gap: 9, padding: '9px 10px', borderRadius: 9, background: partido.resultado === 'acertado' ? '#f0fdf4' : partido.resultado === 'fallado' ? '#fef2f2' : '#f8fafc' }}>
-                      <div style={{ minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', overflowWrap: 'anywhere' }}>{partido.local} – {partido.visitante}</div><div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Pronóstico: <strong>{normalizarPronostico(partido.pronostico).join(' + ') || 'Sin revisar'}</strong></div></div>
-                      <div role="group" aria-label={`Resultado ${partido.local} contra ${partido.visitante}`} style={{ display: 'flex', gap: 5 }}>
-                        {(['acertado', 'fallado', 'pendiente'] as Resultado[]).map((resultado) => <button key={resultado} type="button" onClick={() => cambiarResultado(boleto, partido.id, resultado)} aria-pressed={partido.resultado === resultado} title={resultado === 'acertado' ? 'Acertado' : resultado === 'fallado' ? 'Fallado' : 'Pendiente'} style={{ width: 34, height: 32, borderRadius: 8, border: partido.resultado === resultado ? `2px solid ${resultado === 'acertado' ? '#16a34a' : resultado === 'fallado' ? '#dc2626' : '#94a3b8'}` : '1px solid #cbd5e1', background: partido.resultado === resultado ? resultado === 'acertado' ? '#dcfce7' : resultado === 'fallado' ? '#fee2e2' : '#e2e8f0' : '#fff', color: resultado === 'acertado' ? '#15803d' : resultado === 'fallado' ? '#b91c1c' : '#64748b', cursor: 'pointer', fontWeight: 900 }}>{resultado === 'acertado' ? '✓' : resultado === 'fallado' ? '✕' : '·'}</button>)}
-                      </div>
-                    </div>)}
-                  </div>
+                  {abierto && <div id={`detalle-boleto-${boleto.id}`}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, background: '#f8fafc', borderRadius: 10, padding: 10, marginTop: 12, fontSize: 12, color: '#475569' }}>
+                      <span>Apostado: <strong>{euros(importeBoleto)}</strong></span><span>Cuota: <strong>{cuotaBoleto.toFixed(2)}</strong></span><span>Ganancia potencial: <strong>{euros(Number(boleto.gananciaPotencial) || importeBoleto * cuotaBoleto)}</strong></span><span>Estado: <strong style={{ color: estado === 'Acertado' ? '#15803d' : estado === 'Fallado' ? '#b91c1c' : '#a16207' }}>{estado}</strong></span>{beneficioBoleto !== null && <span>Balance: <strong style={{ color: beneficioBoleto >= 0 ? '#15803d' : '#b91c1c' }}>{euros(beneficioBoleto)}</strong></span>}{saldosPorBoleto.porBoleto[boleto.id] && <><span>Saldo inicial: <strong>{euros(saldosPorBoleto.porBoleto[boleto.id].inicial)}</strong></span><span>Saldo acumulado: <strong>{euros(saldosPorBoleto.porBoleto[boleto.id].acumulado)}</strong></span></>}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 10 }}>
+                      {boleto.partidos.map((partido) => <div key={partido.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'center', gap: 9, padding: '9px 10px', borderRadius: 9, background: partido.resultado === 'acertado' ? '#f0fdf4' : partido.resultado === 'fallado' ? '#fef2f2' : '#f8fafc' }}>
+                        <div style={{ minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', overflowWrap: 'anywhere' }}>{partido.local} – {partido.visitante}</div><div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Pronóstico: <strong>{normalizarPronostico(partido.pronostico).join(' + ') || 'Sin revisar'}</strong></div></div>
+                        <div role="group" aria-label={`Resultado ${partido.local} contra ${partido.visitante}`} style={{ display: 'flex', gap: 5 }}>
+                          {(['acertado', 'fallado', 'pendiente'] as Resultado[]).map((resultado) => <button key={resultado} type="button" onClick={() => cambiarResultado(boleto, partido.id, resultado)} aria-pressed={partido.resultado === resultado} title={resultado === 'acertado' ? 'Acertado' : resultado === 'fallado' ? 'Fallado' : 'Pendiente'} style={{ width: 34, height: 32, borderRadius: 8, border: partido.resultado === resultado ? `2px solid ${resultado === 'acertado' ? '#16a34a' : resultado === 'fallado' ? '#dc2626' : '#94a3b8'}` : '1px solid #cbd5e1', background: partido.resultado === resultado ? resultado === 'acertado' ? '#dcfce7' : resultado === 'fallado' ? '#fee2e2' : '#e2e8f0' : '#fff', color: resultado === 'acertado' ? '#15803d' : resultado === 'fallado' ? '#b91c1c' : '#64748b', cursor: 'pointer', fontWeight: 900 }}>{resultado === 'acertado' ? '✓' : resultado === 'fallado' ? '✕' : '·'}</button>)}
+                        </div>
+                      </div>)}
+                    </div>
+                  </div>}
                 </article>;
               })}
             </div>
