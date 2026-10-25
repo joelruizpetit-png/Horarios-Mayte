@@ -421,6 +421,10 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
       alert("Por favor, introduce un título para el evento.");
       return;
     }
+    if (eventoAEditar.tipo === 'trabajo' && !['Mañana', 'Tarde'].includes(eventoAEditar.titulo)) {
+      alert('Selecciona si el turno es de Mañana o de Tarde.');
+      return;
+    }
 
     const fechaClave = eventoAEditar.fechaClave;
     const notasDelDia = [...(eventos[fechaClave] || [])];
@@ -1311,18 +1315,36 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
               </button>
             </div>
 
-            <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
-              Título:
-            </label>
-            <input 
-              type="text" 
-              value={eventoAEditar.titulo}
-              onChange={(e) => setEventoAEditar({...eventoAEditar, titulo: e.target.value})}
-              style={{ 
-                width: "100%", padding: "10px", marginBottom: "14px", borderRadius: "8px", 
-                border: "1px solid #d1d5db", backgroundColor: "#ffffff", color: "#111827", fontSize: "14px", outline: "none" 
-              }}
-            />
+            {eventoAEditar.tipo === 'trabajo' ? (
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+                {['Mañana', 'Tarde'].map((turno) => (
+                  <button
+                    key={turno}
+                    type="button"
+                    aria-pressed={eventoAEditar.titulo === turno}
+                    onClick={() => setEventoAEditar({ ...eventoAEditar, titulo: turno })}
+                    style={{ flex: 1, padding: '10px', borderRadius: '8px', border: eventoAEditar.titulo === turno ? '2px solid #111827' : '1px solid #d1d5db', backgroundColor: eventoAEditar.titulo === turno ? '#f3f4f6' : '#ffffff', color: '#111827', fontWeight: 800, fontSize: '14px', cursor: 'pointer' }}
+                  >
+                    {turno}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <>
+                <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
+                  Título:
+                </label>
+                <input
+                  type="text"
+                  value={eventoAEditar.titulo}
+                  onChange={(e) => setEventoAEditar({ ...eventoAEditar, titulo: e.target.value })}
+                  style={{
+                    width: "100%", padding: "10px", marginBottom: "14px", borderRadius: "8px",
+                    border: "1px solid #d1d5db", backgroundColor: "#ffffff", color: "#111827", fontSize: "14px", outline: "none"
+                  }}
+                />
+              </>
+            )}
             
             {eventoAEditar.tipo === 'normal' ? (
               <>

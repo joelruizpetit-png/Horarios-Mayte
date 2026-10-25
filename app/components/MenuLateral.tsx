@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { formatearNombreFamiliar } from '../utils/actividad';
 import { APP_VERSION } from '../data/version';
@@ -28,6 +28,12 @@ export default function MenuLateral({
   onCerrarSesion,
   onAbrirNovedadesVersion
 }: MenuLateralProps) {
+  const [quinielasAbierto, setQuinielasAbierto] = useState(seccionActiva.startsWith('quinielas'));
+
+  useEffect(() => {
+    if (seccionActiva.startsWith('quinielas')) setQuinielasAbierto(true);
+  }, [seccionActiva]);
+
   // Prevenir scroll de fondo al estar el menú abierto
   useEffect(() => {
     if (abierto) {
@@ -465,17 +471,19 @@ export default function MenuLateral({
           </button>
 
           {/* OPCIÓN 5: QUINIELAS Y SU SUBMENÚ */}
-          <div style={{ border: seccionActiva.startsWith('quinielas') ? '2px solid #fde68a' : '1px solid #f1f5f9', borderRadius: 12, background: seccionActiva.startsWith('quinielas') ? '#fffbeb' : '#fff', overflow: 'hidden' }}>
+          <div style={{ border: quinielasAbierto || seccionActiva.startsWith('quinielas') ? '2px solid #fde68a' : '1px solid #f1f5f9', borderRadius: 12, background: quinielasAbierto || seccionActiva.startsWith('quinielas') ? '#fffbeb' : '#fff', overflow: 'hidden' }}>
             <button
-              onClick={() => { onCambiarSeccion('quinielas'); onCerrar(); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', width: '100%', border: 0, background: 'transparent', color: seccionActiva.startsWith('quinielas') ? '#92400e' : '#334155', cursor: 'pointer', textAlign: 'left' }}
+              onClick={() => setQuinielasAbierto((abierto) => !abierto)}
+              aria-expanded={quinielasAbierto}
+              aria-controls="submenu-quinielas"
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', width: '100%', border: 0, background: 'transparent', color: quinielasAbierto || seccionActiva.startsWith('quinielas') ? '#92400e' : '#334155', cursor: 'pointer', textAlign: 'left' }}
             >
-              <span style={{ width: 38, height: 38, borderRadius: 10, background: seccionActiva.startsWith('quinielas') ? '#fef3c7' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎟️</span>
+              <span style={{ width: 38, height: 38, borderRadius: 10, background: quinielasAbierto || seccionActiva.startsWith('quinielas') ? '#fef3c7' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎟️</span>
               <span style={{ flex: 1 }}><span style={{ display: 'block', fontSize: 14, fontWeight: 800 }}>Quinielas</span><span style={{ display: 'block', marginTop: 2, color: '#64748b', fontSize: 11 }}>Boletos, estadísticas e historial</span></span>
-              <span aria-hidden="true" style={{ fontSize: 14 }}>{seccionActiva.startsWith('quinielas') ? '⌄' : '›'}</span>
+              <span aria-hidden="true" style={{ fontSize: 14 }}>{quinielasAbierto ? '⌄' : '›'}</span>
             </button>
-            {seccionActiva.startsWith('quinielas') && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 10px 10px 60px' }}>
+            {quinielasAbierto && (
+              <div id="submenu-quinielas" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 10px 10px 60px' }}>
                 {([
                   ['quinielas', 'Mis boletos'],
                   ['quinielas-estadisticas', 'Estadísticas'],

@@ -284,6 +284,12 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     const todosPartidos = boletosEstadisticas.flatMap((boleto) => boleto.partidos || []);
     const cuotas = boletosEstadisticas.filter((boleto) => Number(boleto.cuota) > 0);
     const apostado = boletosEstadisticas.reduce((total, boleto) => total + (Number(boleto.importe) || 0), 0);
+    const boletosAcertados = boletosEstadisticas.filter((boleto) =>
+      (boleto.partidos || []).length > 0 && boleto.partidos.every((partido) => partido.resultado === 'acertado')
+    ).length;
+    const boletosFallados = boletosEstadisticas.filter((boleto) =>
+      (boleto.partidos || []).length > 0 && boleto.partidos.some((partido) => partido.resultado === 'fallado')
+    ).length;
     const liquidados = boletosEstadisticas.filter((boleto) => (boleto.partidos || []).length > 0 && (boleto.partidos.some((partido) => partido.resultado === 'fallado') || boleto.partidos.every((partido) => partido.resultado === 'acertado')));
     const beneficio = liquidados.reduce((total, boleto) => {
       const perdido = boleto.partidos.some((partido) => partido.resultado === 'fallado');
@@ -293,6 +299,8 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
       total: todosPartidos.length,
       acertados: todosPartidos.filter((partido) => partido.resultado === 'acertado').length,
       fallados: todosPartidos.filter((partido) => partido.resultado === 'fallado').length,
+      boletosAcertados,
+      boletosFallados,
       apostado,
       cuotaMedia: cuotas.length ? cuotas.reduce((total, boleto) => total + Number(boleto.cuota), 0) / cuotas.length : 0,
       beneficio,
@@ -520,6 +528,8 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
             {tarjeta('Partidos insertados', `${resumen.total}`, '#0047b3', '#eff6ff')}
             {tarjeta('Acertados', `${resumen.acertados}`, '#15803d', '#f0fdf4')}
             {tarjeta('Fallados', `${resumen.fallados}`, '#b91c1c', '#fef2f2')}
+            {tarjeta('Boletos acertados', `${resumen.boletosAcertados}`, '#15803d', '#f0fdf4')}
+            {tarjeta('Boletos fallados', `${resumen.boletosFallados}`, '#b91c1c', '#fef2f2')}
             {tarjeta('Total apostado', euros(resumen.apostado), '#7c3aed', '#f5f3ff')}
             {tarjeta('Cuota media', resumen.cuotaMedia ? resumen.cuotaMedia.toFixed(2) : '—', '#0369a1', '#f0f9ff')}
             {tarjeta('Beneficio / pérdida', euros(resumen.beneficio), resumen.beneficio >= 0 ? '#15803d' : '#b91c1c', resumen.beneficio >= 0 ? '#f0fdf4' : '#fef2f2')}
@@ -605,8 +615,8 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                 const beneficioBoleto = !completado ? null : perdido ? -importeBoleto : importeBoleto * (cuotaBoleto - 1);
                 const abierto = boletosAbiertos.has(boleto.id);
                 return <article key={boleto.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 15, padding: 15, boxShadow: '0 2px 8px rgba(15,23,42,.04)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                    <button type="button" onClick={() => alternarBoleto(boleto.id)} aria-expanded={abierto} aria-controls={`detalle-boleto-${boleto.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flex: '1 1 180px', minWidth: 0, border: 0, padding: 0, background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+                    <button type="button" onClick={() => alternarBoleto(boleto.id)} aria-expanded={abierto} aria-controls={`detalle-boleto-${boleto.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, flex: '1 1 180px', minWidth: 0, border: 0, padding: '0 10px 0 0', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
                       <span style={{ minWidth: 0 }}><span style={{ display: 'block', fontWeight: 800, fontSize: 16, color: '#0f172a', overflowWrap: 'anywhere' }}>{boleto.nombre}</span><span style={{ display: 'block', color: '#64748b', fontSize: 12, marginTop: 3 }}>{new Date(`${boleto.fecha}T12:00:00`).toLocaleDateString('es-ES')} · {boleto.partidos.length} partidos</span></span>
                       <span aria-hidden="true" style={{ flexShrink: 0, color: '#64748b', fontSize: 22, lineHeight: 1 }}>{abierto ? '⌃' : '⌄'}</span>
                     </button>
