@@ -1,6 +1,6 @@
 // app/data/version.ts
 
-export const APP_VERSION = "1.5.0";
+export const APP_VERSION = "1.6.0";
 
 export interface ItemNovedadVersion {
   icono: string;
@@ -23,6 +23,14 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
   lema: "OS Familiar de Ana, Joel y Alma",
   fecha: "Octubre 2026",
   items: [
+    {
+      icono: "⚙️",
+      titulo: "Nuevo módulo de Configuración y Sonidos de Alarma",
+      descripcion: "Personaliza el sonido de alarma del calendario para cada usuario (Joel y Ana) entre 5 tonos disponibles en public/sounds/, con previsualización en vivo, control de volumen, antelación configurable y persistencia en localStorage.",
+      badge: "Configuración",
+      badgeColor: "#0047b3",
+      badgeBg: "#eff6ff"
+    },
     {
       icono: "🔒",
       titulo: "Nueva Zona Privada con PIN y Bloc de Notas",

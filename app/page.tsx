@@ -10,11 +10,19 @@ import MenuLateral, { type SeccionPrincipal } from './components/MenuLateral';
 import FinanzasFamiliares from './components/FinanzasFamiliares';
 import BlocNotas from './components/BlocNotas';
 import ModalPinPrivado from './components/ModalPinPrivado';
+import ConfiguracionUsuario from './components/ConfiguracionUsuario';
 import ListaCompra from './components/ListaCompra';
 import Quinielas from './components/Quinielas';
 import ModalNovedades from './components/ModalNovedades';
 import ModalVersion from './components/ModalVersion';
 import { auth, db } from './firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+import {
+  obtenerPreferenciasAlarma,
+  reproducirSonidoAlarma,
+  detenerSonidoAlarma,
+  obtenerSonidoAlarmaPorId
+} from './utils/sonidosAlarma';
 import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
@@ -50,6 +58,15 @@ export default function Home() {
   const [modalPinAbierto, setModalPinAbierto] = useState<boolean>(false);
   const [modoModalPin, setModoModalPin] = useState<'desbloquear' | 'cambiar'>('desbloquear');
   const [seccionPendientePrivada, setSeccionPendientePrivada] = useState<SeccionPrincipal | null>(null);
+
+  // Estados del disparador de Alarmas del Calendario
+  const [eventosAgendaGlobal, setEventosAgendaGlobal] = useState<Record<string, Array<{ titulo?: string; hora?: string } | string>>>({});
+  const [alarmaSonandoInfo, setAlarmaSonandoInfo] = useState<{
+    titulo: string;
+    hora: string;
+    subtitulo: string;
+    sonidoNombre: string;
+  } | null>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -209,6 +226,132 @@ export default function Home() {
     };
   }, [zonaPrivadaDesbloqueada]);
 
+  // Suscripción a los eventos de la Agenda en Firestore para el disparador de alarmas
+  useEffect(() => {
+    if (!usuario) return;
+    const refAgenda = doc(db, 'agenda', 'datos');
+    const unsub = onSnapshot(
+      refAgenda,
+      (snap) => {
+        if (snap.exists()) {
+          setEventosAgendaGlobal(snap.data() as Record<string, Array<{ titulo?: string; hora?: string } | string>>);
+        }
+      },
+      (err) => {
+        console.warn('Error al escuchar agenda para alarmas:', err);
+      }
+    );
+    return () => unsub();
+  }, [usuario]);
+
+  // Disparador en tiempo real de las Alarmas del Calendario usando el tono elegido por el usuario
+  useEffect(() => {
+    if (!usuario) return;
+
+    const comprobarAlarmasHoy = () => {
+      const prefs = obtenerPreferenciasAlarma(usuario.email, usuario.displayName);
+      if (!prefs.activa) return;
+
+      const ahora = new Date();
+      const hoyClave = ahora.toDateString();
+      const listaHoy = eventosAgendaGlobal[hoyClave];
+      if (!Array.isArray(listaHoy) || listaHoy.length === 0) return;
+
+      const minutosActuales = ahora.getHours() * 60 + ahora.getMinutes();
+
+      let registroDisparadas: Record<string, boolean> = {};
+      try {
+        const raw = localStorage.getItem('planificador_alarmas_disparadas_hoy');
+        if (raw) {
+          registroDisparadas = JSON.parse(raw);
+        }
+      } catch {
+        registroDisparadas = {};
+      }
+
+      for (const item of listaHoy) {
+        if (typeof item === 'string') continue;
+        const titulo = (item.titulo || '').trim();
+        const horaStr = (item.hora || '').trim();
+        if (!titulo || !horaStr || horaStr === '--:--' || !horaStr.includes(':')) continue;
+
+        const [hh, mm] = horaStr.split(':').map(Number);
+        if (Number.isNaN(hh) || Number.isNaN(mm)) continue;
+        const minutosEvento = hh * 60 + mm;
+
+        const puntosDisparo: Array<{ min: number; etiqueta: string }> = [
+          { min: minutosEvento, etiqueta: '¡Es la hora del evento!' }
+        ];
+        if (prefs.minutosAntelacion > 0) {
+          puntosDisparo.push({
+            min: minutosEvento - prefs.minutosAntelacion,
+            etiqueta: `Comienza en ${prefs.minutosAntelacion} minutos`
+          });
+        }
+
+        for (const punto of puntosDisparo) {
+          if (minutosActuales === punto.min) {
+            const idUnicoAlarma = `${hoyClave}|${titulo}|${horaStr}|${punto.min}`;
+            if (!registroDisparadas[idUnicoAlarma]) {
+              registroDisparadas[idUnicoAlarma] = true;
+              try {
+                localStorage.setItem('planificador_alarmas_disparadas_hoy', JSON.stringify(registroDisparadas));
+              } catch {
+                // Ignorar cuota
+              }
+
+              const sonidoMeta = obtenerSonidoAlarmaPorId(prefs.sonidoId);
+              reproducirSonidoAlarma({
+                sonidoId: prefs.sonidoId,
+                volumen: prefs.volumen,
+                email: usuario.email,
+                displayName: usuario.displayName
+              });
+
+              setAlarmaSonandoInfo({
+                titulo,
+                hora: horaStr,
+                subtitulo: punto.etiqueta,
+                sonidoNombre: sonidoMeta.nombre
+              });
+              return;
+            }
+          }
+        }
+      }
+    };
+
+    comprobarAlarmasHoy();
+    const intervalo = setInterval(comprobarAlarmasHoy, 15000);
+    return () => clearInterval(intervalo);
+  }, [usuario, eventosAgendaGlobal]);
+
+  const simularAlarmaCalendario = () => {
+    const prefs = obtenerPreferenciasAlarma(usuario?.email, usuario?.displayName);
+    const sonidoMeta = obtenerSonidoAlarmaPorId(prefs.sonidoId);
+    const ahora = new Date();
+    const horaActual = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+
+    reproducirSonidoAlarma({
+      sonidoId: prefs.sonidoId,
+      volumen: prefs.volumen,
+      email: usuario?.email,
+      displayName: usuario?.displayName
+    });
+
+    setAlarmaSonandoInfo({
+      titulo: 'Evento de Prueba en la Agenda',
+      hora: horaActual,
+      subtitulo: 'Simulación de alarma del calendario',
+      sonidoNombre: sonidoMeta.nombre
+    });
+  };
+
+  const silenciarYCerrarAlarma = () => {
+    detenerSonidoAlarma();
+    setAlarmaSonandoInfo(null);
+  };
+
   if (loading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>Cargando...</div>;
 
   // --- SI YA ESTÁS DENTRO: MUESTRA LA CABECERA SOFASCORE Y LA SECCIÓN ACTIVA ---
@@ -225,6 +368,78 @@ export default function Home() {
           color: "#111827"
         }}
       >
+        {/* BANNER / MODAL FLOTANTE CUANDO SUENA UNA ALARMA DEL CALENDARIO */}
+        {alarmaSonandoInfo && (
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            style={{
+              position: 'fixed',
+              top: '18px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '92%',
+              maxWidth: '420px',
+              background: 'linear-gradient(135deg, #0047b3 0%, #1e1b4b 100%)',
+              color: '#ffffff',
+              borderRadius: '18px',
+              padding: '16px 18px',
+              boxShadow: '0 16px 40px rgba(0, 0, 0, 0.35)',
+              zIndex: 1500,
+              border: '2px solid #93c5fd',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '12px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.18)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '24px',
+                  flexShrink: 0
+                }}
+              >
+                🔔
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase' }}>
+                  {alarmaSonandoInfo.subtitulo} • {alarmaSonandoInfo.hora}
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 800, marginTop: '2px' }}>
+                  {alarmaSonandoInfo.titulo}
+                </div>
+                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.75)', marginTop: '2px' }}>
+                  🎵 Reproduciendo tono: {alarmaSonandoInfo.sonidoNombre}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={silenciarYCerrarAlarma}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: 'none',
+                backgroundColor: '#ffffff',
+                color: '#0f172a',
+                fontSize: '13px',
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              🔇 Detener Alarma y Cerrar
+            </button>
+          </div>
+        )}
         {/* MENÚ LATERAL (NAVIGATION DRAWER) */}
         <MenuLateral
           abierto={menuLateralAbierto}
@@ -322,6 +537,11 @@ export default function Home() {
             />
           ) : seccionPrincipal === 'horas-trabajadas' ? (
             <ContadorHorasTrabajadas usuario={usuario} onIrAPlanificador={() => setSeccionPrincipal('planificador')} />
+          ) : seccionPrincipal === 'configuracion' ? (
+            <ConfiguracionUsuario
+              usuario={usuario}
+              onSimularAlarmaCalendario={simularAlarmaCalendario}
+            />
           ) : (
 
             <>

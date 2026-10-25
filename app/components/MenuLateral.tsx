@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { formatearNombreFamiliar } from '../utils/actividad';
 import { APP_VERSION } from '../data/version';
 
-export type SeccionPrincipal = 'planificador' | 'finanzas' | 'bloc-notas' | 'lista-compra' | 'horas-trabajadas' | 'quinielas' | 'quinielas-estadisticas' | 'quinielas-historial';
+export type SeccionPrincipal = 'planificador' | 'finanzas' | 'bloc-notas' | 'lista-compra' | 'horas-trabajadas' | 'quinielas' | 'quinielas-estadisticas' | 'quinielas-historial' | 'configuracion';
 
 interface MenuLateralProps {
   abierto: boolean;
@@ -664,6 +664,77 @@ export default function MenuLateral({
               </div>
             )}
           </div>
+
+          {/* OPCIÓN 6: CONFIGURACIÓN (SONIDOS DE ALARMA Y PREFERENCIAS) */}
+          <button
+            type="button"
+            onClick={() => {
+              onCambiarSeccion('configuracion');
+              onCerrar();
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px 14px',
+              borderRadius: '12px',
+              border: seccionActiva === 'configuracion' ? '2px solid #cbd5e1' : '1px solid #f1f5f9',
+              backgroundColor: seccionActiva === 'configuracion' ? '#f1f5f9' : '#ffffff',
+              color: seccionActiva === 'configuracion' ? '#0f172a' : '#334155',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'all 0.15s ease',
+              width: '100%',
+              boxShadow: seccionActiva === 'configuracion' ? '0 2px 8px rgba(15, 23, 42, 0.08)' : 'none'
+            }}
+            onMouseOver={(e) => {
+              if (seccionActiva !== 'configuracion') {
+                e.currentTarget.style.backgroundColor = '#f8fafc';
+                e.currentTarget.style.borderColor = '#e2e8f0';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (seccionActiva !== 'configuracion') {
+                e.currentTarget.style.backgroundColor = '#ffffff';
+                e.currentTarget.style.borderColor = '#f1f5f9';
+              }
+            }}
+          >
+            <div
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                backgroundColor: seccionActiva === 'configuracion' ? '#e2e8f0' : '#f1f5f9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '18px',
+                flexShrink: 0
+              }}
+            >
+              ⚙️
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '14px', fontWeight: 800 }}>
+                Configuración
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500, marginTop: '2px' }}>
+                Sonido de alarma y preferencias
+              </div>
+            </div>
+            {seccionActiva === 'configuracion' && (
+              <span
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#0f172a',
+                  flexShrink: 0
+                }}
+              />
+            )}
+          </button>
         </div>
 
         {/* PIE DEL MENÚ LATERAL */}

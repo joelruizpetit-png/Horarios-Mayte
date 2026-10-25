@@ -448,6 +448,38 @@ export default function HeaderSofascore({
             {onCambiarSeccion && <button onClick={() => onCambiarSeccion('planificador')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12, fontWeight: 700, backgroundColor: '#fff', color: '#0047b3', border: '1px solid #bfdbfe', borderRadius: 8, cursor: 'pointer' }}>📅 Ver Agenda</button>}
           </div>
         </div>
+      ) : seccionActiva === 'configuracion' ? (
+        <div style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'center', width: '100%', padding: '10px 16px' }}>
+          <div style={{ width: '100%', maxWidth: '500px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 18 }}>⚙️</span>
+              <div>
+                <span style={{ display: 'block', fontSize: 14, fontWeight: 800, color: '#0f172a' }}>Configuración</span>
+                <span style={{ display: 'block', fontSize: 11, color: '#64748b' }}>Preferencias y Sonidos de Alarma</span>
+              </div>
+            </div>
+            {onCambiarSeccion && (
+              <button
+                onClick={() => onCambiarSeccion('planificador')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  backgroundColor: '#eff6ff',
+                  color: '#0047b3',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: 8,
+                  cursor: 'pointer'
+                }}
+              >
+                📅 Ver Agenda
+              </button>
+            )}
+          </div>
+        </div>
       ) : (
         /* BARRA DE PESTAÑAS SUB-HEADER ESTILO SOFASCORE */
         <nav 
