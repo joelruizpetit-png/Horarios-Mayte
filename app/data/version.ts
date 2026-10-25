@@ -1,6 +1,6 @@
 // app/data/version.ts
 
-export const APP_VERSION = "1.4.3";
+export const APP_VERSION = "1.5.0";
 
 export interface ItemNovedadVersion {
   icono: string;
@@ -23,6 +23,14 @@ export const NOVEDADES_VERSION: NovedadesVersionConfig = {
   lema: "OS Familiar de Ana, Joel y Alma",
   fecha: "Octubre 2026",
   items: [
+    {
+      icono: "🔒",
+      titulo: "Nueva Zona Privada con PIN y Bloc de Notas",
+      descripcion: "Apartado protegido por PIN común en el menú lateral que agrupa Finanzas Familiares y el nuevo Bloc de Notas y Contraseñas (con cifrado, categorías, generador de claves, vista oculta y copiado en un toque).",
+      badge: "Seguridad & Notas",
+      badgeColor: "#4c1d95",
+      badgeBg: "#ede9fe"
+    },
     {
       icono: "🎟️",
       titulo: "Nueva sección de Quinielas",

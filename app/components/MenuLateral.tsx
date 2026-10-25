@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { formatearNombreFamiliar } from '../utils/actividad';
 import { APP_VERSION } from '../data/version';
 
-export type SeccionPrincipal = 'planificador' | 'finanzas' | 'lista-compra' | 'horas-trabajadas' | 'quinielas' | 'quinielas-estadisticas' | 'quinielas-historial';
+export type SeccionPrincipal = 'planificador' | 'finanzas' | 'bloc-notas' | 'lista-compra' | 'horas-trabajadas' | 'quinielas' | 'quinielas-estadisticas' | 'quinielas-historial';
 
 interface MenuLateralProps {
   abierto: boolean;
@@ -17,6 +17,9 @@ interface MenuLateralProps {
   } | null;
   onCerrarSesion: () => void;
   onAbrirNovedadesVersion?: () => void;
+  zonaPrivadaDesbloqueada?: boolean;
+  onBloquearZonaPrivada?: () => void;
+  onCambiarPinZonaPrivada?: () => void;
 }
 
 export default function MenuLateral({
@@ -26,12 +29,18 @@ export default function MenuLateral({
   onCambiarSeccion,
   usuario,
   onCerrarSesion,
-  onAbrirNovedadesVersion
+  onAbrirNovedadesVersion,
+  zonaPrivadaDesbloqueada = false,
+  onBloquearZonaPrivada,
+  onCambiarPinZonaPrivada
 }: MenuLateralProps) {
+  const esSeccionPrivada = seccionActiva === 'finanzas' || seccionActiva === 'bloc-notas';
+  const [zonaPrivadaAbierta, setZonaPrivadaAbierta] = useState(esSeccionPrivada);
   const [quinielasAbierto, setQuinielasAbierto] = useState(seccionActiva.startsWith('quinielas'));
 
   useEffect(() => {
     if (seccionActiva.startsWith('quinielas')) setQuinielasAbierto(true);
+    if (seccionActiva === 'finanzas' || seccionActiva === 'bloc-notas') setZonaPrivadaAbierta(true);
   }, [seccionActiva]);
 
   // Prevenir scroll de fondo al estar el menú abierto
@@ -272,71 +281,230 @@ export default function MenuLateral({
             )}
           </button>
 
-          {/* OPCIÓN 2: FINANZAS FAMILIARES */}
-          <button
-            onClick={() => {
-              onCambiarSeccion('finanzas');
-              onCerrar();
-            }}
+          {/* OPCIÓN 2: ZONA PRIVADA (FINANZAS FAMILIARES + BLOC DE NOTAS) */}
+          <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px 14px',
+              border:
+                zonaPrivadaAbierta || esSeccionPrivada
+                  ? zonaPrivadaDesbloqueada
+                    ? '2px solid #a7f3d0'
+                    : '2px solid #c7d2fe'
+                  : '1px solid #f1f5f9',
               borderRadius: '12px',
-              border: seccionActiva === 'finanzas' ? '2px solid #a7f3d0' : '1px solid #f1f5f9',
-              backgroundColor: seccionActiva === 'finanzas' ? '#ecfdf5' : '#ffffff',
-              color: seccionActiva === 'finanzas' ? '#047857' : '#334155',
-              cursor: 'pointer',
-              textAlign: 'left',
-              transition: 'all 0.15s ease',
-              width: '100%',
-              boxShadow: seccionActiva === 'finanzas' ? '0 2px 8px rgba(4, 120, 87, 0.08)' : 'none'
-            }}
-            onMouseOver={(e) => {
-              if (seccionActiva !== 'finanzas') {
-                e.currentTarget.style.backgroundColor = '#f8fafc';
-                e.currentTarget.style.borderColor = '#e2e8f0';
-              }
-            }}
-            onMouseOut={(e) => {
-              if (seccionActiva !== 'finanzas') {
-                e.currentTarget.style.backgroundColor = '#ffffff';
-                e.currentTarget.style.borderColor = '#f1f5f9';
-              }
+              background:
+                zonaPrivadaAbierta || esSeccionPrivada
+                  ? zonaPrivadaDesbloqueada
+                    ? '#f0fdf4'
+                    : '#f8fafc'
+                  : '#ffffff',
+              overflow: 'hidden',
+              transition: 'all 0.15s ease'
             }}
           >
-            <div style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              backgroundColor: seccionActiva === 'finanzas' ? '#d1fae5' : '#f1f5f9',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '18px',
-              flexShrink: 0
-            }}>
-              💰
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '14px', fontWeight: 800 }}>
-                Finanzas Familiares
+            <button
+              type="button"
+              onClick={() => setZonaPrivadaAbierta((abiertoActual) => !abiertoActual)}
+              aria-expanded={zonaPrivadaAbierta}
+              aria-controls="submenu-zona-privada"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px 14px',
+                width: '100%',
+                border: 0,
+                background: 'transparent',
+                color: esSeccionPrivada ? '#0f172a' : '#334155',
+                cursor: 'pointer',
+                textAlign: 'left'
+              }}
+            >
+              <span
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: zonaPrivadaDesbloqueada ? '#d1fae5' : '#e0e7ff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '18px',
+                  flexShrink: 0
+                }}
+              >
+                {zonaPrivadaDesbloqueada ? '🔓' : '🔒'}
+              </span>
+              <span style={{ flex: 1 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 800 }}>Zona Privada</span>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      padding: '2px 6px',
+                      borderRadius: '999px',
+                      backgroundColor: zonaPrivadaDesbloqueada ? '#dcfce7' : '#e0e7ff',
+                      color: zonaPrivadaDesbloqueada ? '#15803d' : '#3730a3'
+                    }}
+                  >
+                    {zonaPrivadaDesbloqueada ? 'Abierta' : 'PIN'}
+                  </span>
+                </span>
+                <span style={{ display: 'block', marginTop: '2px', color: '#64748b', fontSize: '11px', fontWeight: 500 }}>
+                  Finanzas y Bloc de Notas
+                </span>
+              </span>
+              <span aria-hidden="true" style={{ fontSize: '14px', color: '#64748b' }}>
+                {zonaPrivadaAbierta ? '⌄' : '›'}
+              </span>
+            </button>
+
+            {zonaPrivadaAbierta && (
+              <div
+                id="submenu-zona-privada"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  padding: '0 10px 10px 16px'
+                }}
+              >
+                {/* SUB-OPCIÓN 2.1: FINANZAS FAMILIARES */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCambiarSeccion('finanzas');
+                    onCerrar();
+                  }}
+                  aria-current={seccionActiva === 'finanzas' ? 'page' : undefined}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    border: seccionActiva === 'finanzas' ? '1px solid #a7f3d0' : '1px solid transparent',
+                    borderRadius: '10px',
+                    padding: '9px 11px',
+                    background: seccionActiva === 'finanzas' ? '#ecfdf5' : '#ffffff',
+                    color: seccionActiva === 'finanzas' ? '#047857' : '#334155',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                  }}
+                >
+                  <span style={{ fontSize: '16px' }}>💰</span>
+                  <span style={{ flex: 1 }}>
+                    <span style={{ display: 'block', fontSize: '13px', fontWeight: seccionActiva === 'finanzas' ? 800 : 700 }}>
+                      Finanzas Familiares
+                    </span>
+                    <span style={{ display: 'block', fontSize: '10.5px', color: '#64748b' }}>
+                      Gastos, Ingresos y Balance
+                    </span>
+                  </span>
+                  {!zonaPrivadaDesbloqueada && (
+                    <span style={{ fontSize: '12px', opacity: 0.7 }} title="Requiere PIN">
+                      🔒
+                    </span>
+                  )}
+                </button>
+
+                {/* SUB-OPCIÓN 2.2: BLOC DE NOTAS Y CONTRASEÑAS */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onCambiarSeccion('bloc-notas');
+                    onCerrar();
+                  }}
+                  aria-current={seccionActiva === 'bloc-notas' ? 'page' : undefined}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    border: seccionActiva === 'bloc-notas' ? '1px solid #c4b5fd' : '1px solid transparent',
+                    borderRadius: '10px',
+                    padding: '9px 11px',
+                    background: seccionActiva === 'bloc-notas' ? '#f5f3ff' : '#ffffff',
+                    color: seccionActiva === 'bloc-notas' ? '#5b21b6' : '#334155',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                  }}
+                >
+                  <span style={{ fontSize: '16px' }}>🔐</span>
+                  <span style={{ flex: 1 }}>
+                    <span style={{ display: 'block', fontSize: '13px', fontWeight: seccionActiva === 'bloc-notas' ? 800 : 700 }}>
+                      Bloc de Notas
+                    </span>
+                    <span style={{ display: 'block', fontSize: '10.5px', color: '#64748b' }}>
+                      Contraseñas y Datos Confidenciales
+                    </span>
+                  </span>
+                  {!zonaPrivadaDesbloqueada && (
+                    <span style={{ fontSize: '12px', opacity: 0.7 }} title="Requiere PIN">
+                      🔒
+                    </span>
+                  )}
+                </button>
+
+                {/* CONTROLES DE SEGURIDAD RÁPIDOS CUANDO ESTÁ DESBLOQUEADA */}
+                {zonaPrivadaDesbloqueada && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '6px',
+                      marginTop: '2px',
+                      paddingTop: '6px',
+                      borderTop: '1px dashed #cbd5e1'
+                    }}
+                  >
+                    {onCambiarPinZonaPrivada && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onCambiarPinZonaPrivada();
+                          onCerrar();
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '6px 8px',
+                          borderRadius: '8px',
+                          border: '1px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
+                          color: '#475569',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⚙️ Cambiar PIN
+                      </button>
+                    )}
+                    {onBloquearZonaPrivada && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onBloquearZonaPrivada();
+                          onCerrar();
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '6px 8px',
+                          borderRadius: '8px',
+                          border: '1px solid #fecaca',
+                          backgroundColor: '#fef2f2',
+                          color: '#dc2626',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🔒 Bloquear
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500, marginTop: '2px' }}>
-                Gastos, Ingresos y Balance
-              </div>
-            </div>
-            {seccionActiva === 'finanzas' && (
-              <span style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: '#047857',
-                flexShrink: 0
-              }} />
             )}
-          </button>
+          </div>
 
           {/* OPCIÓN 3: LISTA DE LA COMPRA */}
           <button

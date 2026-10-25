@@ -8,6 +8,8 @@ import CalendarioDeportes from './components/CalendarioDeportes';
 import MenuEscolarAlma from './components/MenuEscolarAlma';
 import MenuLateral, { type SeccionPrincipal } from './components/MenuLateral';
 import FinanzasFamiliares from './components/FinanzasFamiliares';
+import BlocNotas from './components/BlocNotas';
+import ModalPinPrivado from './components/ModalPinPrivado';
 import ListaCompra from './components/ListaCompra';
 import Quinielas from './components/Quinielas';
 import ModalNovedades from './components/ModalNovedades';
@@ -42,6 +44,12 @@ export default function Home() {
   const [tabActiva, setTabActiva] = useState<string>('general');
   const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(new Date());
   const [activacionSemanal, setActivacionSemanal] = useState(0);
+
+  // Estados de seguridad de la Zona Privada (Finanzas + Bloc de Notas)
+  const [zonaPrivadaDesbloqueada, setZonaPrivadaDesbloqueada] = useState<boolean>(false);
+  const [modalPinAbierto, setModalPinAbierto] = useState<boolean>(false);
+  const [modoModalPin, setModoModalPin] = useState<'desbloquear' | 'cambiar'>('desbloquear');
+  const [seccionPendientePrivada, setSeccionPendientePrivada] = useState<SeccionPrincipal | null>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -143,9 +151,63 @@ export default function Home() {
   };
 
   const cerrarSesion = () => {
+    setZonaPrivadaDesbloqueada(false);
     limpiarTokenGoogleCalendar();
     signOut(auth);
   };
+
+  const cambiarSeccionSegura = (nuevaSeccion: SeccionPrincipal) => {
+    const requierePin = nuevaSeccion === 'finanzas' || nuevaSeccion === 'bloc-notas';
+    if (requierePin && !zonaPrivadaDesbloqueada) {
+      setSeccionPendientePrivada(nuevaSeccion);
+      setModoModalPin('desbloquear');
+      setModalPinAbierto(true);
+      return;
+    }
+    setSeccionPrincipal(nuevaSeccion);
+    if (nuevaSeccion === 'planificador') {
+      setTabActiva('general');
+    }
+  };
+
+  const bloquearZonaPrivada = () => {
+    setZonaPrivadaDesbloqueada(false);
+    if (seccionPrincipal === 'finanzas' || seccionPrincipal === 'bloc-notas') {
+      setSeccionPrincipal('planificador');
+      setTabActiva('general');
+    }
+  };
+
+  const abrirCambioPin = () => {
+    setSeccionPendientePrivada(null);
+    setModoModalPin('cambiar');
+    setModalPinAbierto(true);
+  };
+
+  // Auto-bloqueo tras 10 minutos de inactividad cuando la Zona Privada está abierta
+  useEffect(() => {
+    if (!zonaPrivadaDesbloqueada) return;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const reiniciarTemporizador = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setZonaPrivadaDesbloqueada(false);
+        setSeccionPrincipal((actual) =>
+          actual === 'finanzas' || actual === 'bloc-notas' ? 'planificador' : actual
+        );
+      }, 10 * 60 * 1000);
+    };
+
+    reiniciarTemporizador();
+    const eventos = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+    eventos.forEach((ev) => window.addEventListener(ev, reiniciarTemporizador, { passive: true }));
+
+    return () => {
+      clearTimeout(timer);
+      eventos.forEach((ev) => window.removeEventListener(ev, reiniciarTemporizador));
+    };
+  }, [zonaPrivadaDesbloqueada]);
 
   if (loading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>Cargando...</div>;
 
@@ -168,13 +230,39 @@ export default function Home() {
           abierto={menuLateralAbierto}
           onCerrar={() => setMenuLateralAbierto(false)}
           seccionActiva={seccionPrincipal}
-          onCambiarSeccion={(seccion) => {
-            setSeccionPrincipal(seccion);
-            if (seccion === 'planificador') setTabActiva('general');
-          }}
+          onCambiarSeccion={cambiarSeccionSegura}
           usuario={usuario}
           onCerrarSesion={cerrarSesion}
           onAbrirNovedadesVersion={() => setModalVersionAbierto(true)}
+          zonaPrivadaDesbloqueada={zonaPrivadaDesbloqueada}
+          onBloquearZonaPrivada={bloquearZonaPrivada}
+          onCambiarPinZonaPrivada={abrirCambioPin}
+        />
+
+        {/* MODAL DE SEGURIDAD PIN (ZONA PRIVADA) */}
+        <ModalPinPrivado
+          abierto={modalPinAbierto}
+          modo={modoModalPin}
+          usuario={usuario}
+          destinoNombre={
+            seccionPendientePrivada === 'finanzas'
+              ? 'Finanzas Familiares'
+              : seccionPendientePrivada === 'bloc-notas'
+              ? 'Bloc de Notas'
+              : undefined
+          }
+          onCerrar={() => {
+            setModalPinAbierto(false);
+            setSeccionPendientePrivada(null);
+          }}
+          onExito={() => {
+            setZonaPrivadaDesbloqueada(true);
+            setModalPinAbierto(false);
+            if (seccionPendientePrivada) {
+              setSeccionPrincipal(seccionPendientePrivada);
+              setSeccionPendientePrivada(null);
+            }
+          }}
         />
 
         {/* MODAL DE NOVEDADES DE LA VERSIÓN (RELEASE NOTES / CHANGELOG) */}
@@ -202,7 +290,9 @@ export default function Home() {
           }}
           onAbrirMenuLateral={() => setMenuLateralAbierto(true)}
           seccionActiva={seccionPrincipal}
-          onCambiarSeccion={setSeccionPrincipal}
+          onCambiarSeccion={cambiarSeccionSegura}
+          onBloquearZonaPrivada={bloquearZonaPrivada}
+          onCambiarPinZonaPrivada={abrirCambioPin}
         />
 
         {/* CONTENEDOR PRINCIPAL SEGÚN LA SECCIÓN ACTIVA */}
@@ -217,12 +307,18 @@ export default function Home() {
         >
           {seccionPrincipal === 'quinielas' || seccionPrincipal === 'quinielas-estadisticas' || seccionPrincipal === 'quinielas-historial' ? (
             <Quinielas vista={seccionPrincipal === 'quinielas-estadisticas' ? 'estadisticas' : seccionPrincipal === 'quinielas-historial' ? 'historial' : 'boletos'} usuario={usuario} />
-          ) : seccionPrincipal === 'finanzas' ? (
+          ) : seccionPrincipal === 'finanzas' && zonaPrivadaDesbloqueada ? (
             <FinanzasFamiliares usuario={usuario} />
+          ) : seccionPrincipal === 'bloc-notas' && zonaPrivadaDesbloqueada ? (
+            <BlocNotas
+              usuario={usuario}
+              onBloquearZona={bloquearZonaPrivada}
+              onCambiarPin={abrirCambioPin}
+            />
           ) : seccionPrincipal === 'lista-compra' ? (
             <ListaCompra 
               usuario={usuario} 
-              onIrAFinanzas={() => setSeccionPrincipal('finanzas')} 
+              onIrAFinanzas={() => cambiarSeccionSegura('finanzas')} 
             />
           ) : seccionPrincipal === 'horas-trabajadas' ? (
             <ContadorHorasTrabajadas usuario={usuario} onIrAPlanificador={() => setSeccionPrincipal('planificador')} />

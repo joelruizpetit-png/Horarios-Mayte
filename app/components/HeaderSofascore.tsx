@@ -22,6 +22,8 @@ interface HeaderSofascoreProps {
   onAbrirMenuLateral?: () => void;
   seccionActiva?: SeccionPrincipal;
   onCambiarSeccion?: (seccion: SeccionPrincipal) => void;
+  onBloquearZonaPrivada?: () => void;
+  onCambiarPinZonaPrivada?: () => void;
 }
 
 const DEFAULT_TABS: TabItem[] = [
@@ -39,7 +41,9 @@ export default function HeaderSofascore({
   tabs = DEFAULT_TABS,
   onAbrirMenuLateral,
   seccionActiva = 'planificador',
-  onCambiarSeccion
+  onCambiarSeccion,
+  onBloquearZonaPrivada,
+  onCambiarPinZonaPrivada
 }: HeaderSofascoreProps) {
   const nombreUsuario = formatearNombreFamiliar(usuario?.displayName, usuario?.email);
 
@@ -182,7 +186,7 @@ export default function HeaderSofascore({
         </div>
       </div>
 
-      {/* SUB-HEADER: SI ESTAMOS EN FINANZAS O EN EL PLANIFICADOR */}
+      {/* SUB-HEADER: SI ESTAMOS EN FINANZAS, BLOC DE NOTAS O EN EL PLANIFICADOR */}
       {seccionActiva === 'finanzas' ? (
         <div style={{
           backgroundColor: '#ffffff',
@@ -197,7 +201,8 @@ export default function HeaderSofascore({
             maxWidth: '500px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between'
+            justifyContent: 'space-between',
+            gap: '8px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '18px' }}>💰</span>
@@ -206,33 +211,131 @@ export default function HeaderSofascore({
                   Finanzas Familiares
                 </span>
                 <span style={{ fontSize: '11px', color: '#64748b', display: 'block', fontWeight: 500 }}>
-                  Control de Gastos e Ingresos
+                  🔓 Zona Privada • Gastos e Ingresos
                 </span>
               </div>
             </div>
-            {onCambiarSeccion && (
-              <button
-                onClick={() => onCambiarSeccion('planificador')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  backgroundColor: '#eff6ff',
-                  color: '#0047b3',
-                  border: '1px solid #bfdbfe',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#dbeafe')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#eff6ff')}
-              >
-                <span>📅 Ver Agenda</span>
-              </button>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {onBloquearZonaPrivada && (
+                <button
+                  type="button"
+                  onClick={onBloquearZonaPrivada}
+                  title="Bloquear Zona Privada"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 10px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    backgroundColor: '#fef2f2',
+                    color: '#dc2626',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>🔒 Bloquear</span>
+                </button>
+              )}
+              {onCambiarSeccion && (
+                <button
+                  onClick={() => onCambiarSeccion('planificador')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    backgroundColor: '#eff6ff',
+                    color: '#0047b3',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#dbeafe')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#eff6ff')}
+                >
+                  <span>📅 Agenda</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : seccionActiva === 'bloc-notas' ? (
+        <div style={{
+          backgroundColor: '#f5f3ff',
+          borderBottom: '1px solid #ddd6fe',
+          display: 'flex',
+          justifyContent: 'center',
+          width: '100%',
+          padding: '10px 16px'
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '500px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '18px' }}>🔐</span>
+              <div>
+                <span style={{ fontSize: '14px', fontWeight: 800, color: '#4c1d95' }}>
+                  Bloc de Notas
+                </span>
+                <span style={{ fontSize: '11px', color: '#6d28d9', display: 'block', fontWeight: 500 }}>
+                  🔓 Zona Privada • Contraseñas y Datos
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {onBloquearZonaPrivada && (
+                <button
+                  type="button"
+                  onClick={onBloquearZonaPrivada}
+                  title="Bloquear Zona Privada"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 10px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    backgroundColor: '#fef2f2',
+                    color: '#dc2626',
+                    border: '1px solid #fecaca',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>🔒 Bloquear</span>
+                </button>
+              )}
+              {onCambiarSeccion && (
+                <button
+                  onClick={() => onCambiarSeccion('planificador')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    backgroundColor: '#ffffff',
+                    color: '#0047b3',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span>📅 Agenda</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ) : seccionActiva === 'lista-compra' ? (
