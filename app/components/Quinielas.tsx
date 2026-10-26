@@ -24,8 +24,10 @@ interface BoletoQuiniela {
   gananciaPotencial?: number;
   partidos: PartidoQuiniela[];
   creadoEn: string;
+  resueltoEn?: string;
   archivado?: boolean;
   archivadoEn?: string;
+  ocultoHistorial?: boolean;
 }
 
 interface QuinielasProps {
@@ -166,6 +168,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const [boletosArchivados, setBoletosArchivados] = useState<BoletoQuiniela[]>([]);
   const [boletosAbiertos, setBoletosAbiertos] = useState<Set<string>>(() => new Set());
   const [boletosHistorialAbiertos, setBoletosHistorialAbiertos] = useState<Set<string>>(() => new Set());
+  const [mostrarOcultosHistorial, setMostrarOcultosHistorial] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [nombre, setNombre] = useState('');
   const [fecha, setFecha] = useState(hoy);
@@ -221,7 +224,9 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     if (!Number.isFinite(instanteReinicio)) return boletosContabilizados;
     return boletosContabilizados.filter((boleto) => {
       const creadoEn = Date.parse(boleto.creadoEn || '');
-      return Number.isFinite(creadoEn) && creadoEn > instanteReinicio;
+      const resueltoEn = Date.parse(boleto.resueltoEn || '');
+      return (Number.isFinite(creadoEn) && creadoEn > instanteReinicio)
+        || (Number.isFinite(resueltoEn) && resueltoEn > instanteReinicio);
     });
   }, [boletosContabilizados, reinicioEstadisticasEn]);
 
@@ -259,7 +264,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   };
 
   const reiniciarEstadisticas = async () => {
-    const confirmado = window.confirm('¿Reiniciar las estadísticas? Los boletos anteriores se conservarán en Quinielas e Historial, pero dejarán de contar. El saldo inicial volverá a 0,00 €.');
+    const confirmado = window.confirm('¿Reiniciar las estadísticas? Los boletos anteriores se conservarán. Los que ya existían solo volverán a contar cuando marques o actualices un resultado después del reinicio. El saldo inicial volverá a 0,00 €.');
     if (!confirmado) return;
     const fechaReinicio = new Date().toISOString();
     setReiniciandoEstadisticas(true);
@@ -417,8 +422,21 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
 
   const cambiarResultado = async (boleto: BoletoQuiniela, partidoId: string, resultado: Resultado) => {
     const actualizados = boleto.partidos.map((partido) => partido.id === partidoId ? { ...partido, resultado } : partido);
+    const resuelto = actualizados.length > 0 && (
+      actualizados.some((partido) => partido.resultado === 'fallado')
+      || actualizados.every((partido) => partido.resultado === 'acertado')
+    );
+    const fechaResueltoAnterior = Date.parse(boleto.resueltoEn || '');
+    const fechaReinicio = Date.parse(reinicioEstadisticasEn);
+    const debeActualizarFechaResolucion = !Number.isFinite(fechaResueltoAnterior)
+      || (Number.isFinite(fechaReinicio) && fechaResueltoAnterior <= fechaReinicio);
     try {
-      await updateDoc(doc(db, COLECCION, boleto.id), { partidos: actualizados });
+      await updateDoc(doc(db, COLECCION, boleto.id), {
+        partidos: actualizados,
+        resueltoEn: resuelto
+          ? debeActualizarFechaResolucion ? new Date().toISOString() : boleto.resueltoEn
+          : '',
+      });
     } catch (error) {
       console.error('No se pudo actualizar el resultado:', error);
       setMensaje('No se pudo actualizar el resultado del partido.');
@@ -432,6 +450,19 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     } catch (error) {
       console.error('No se pudo guardar el boleto en el historial:', error);
       setMensaje('No se pudo guardar el boleto en el historial. Comprueba la conexión e inténtalo de nuevo.');
+    }
+  };
+
+  const cambiarVisibilidadHistorial = async (boleto: BoletoQuiniela, oculto: boolean) => {
+    try {
+      await updateDoc(doc(db, COLECCION, boleto.id), { ocultoHistorial: oculto });
+      if (!oculto && boletosArchivados.filter((ticket) => ticket.ocultoHistorial).length <= 1) {
+        setMostrarOcultosHistorial(false);
+      }
+      setMensaje(oculto ? 'Boleto ocultado del historial. Sigue guardado y contando en estadísticas.' : 'Boleto restaurado en el historial.');
+    } catch (error) {
+      console.error('No se pudo cambiar la visibilidad del boleto:', error);
+      setMensaje('No se pudo actualizar el historial. Comprueba la conexión e inténtalo de nuevo.');
     }
   };
 
@@ -463,22 +494,35 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const importeNumero = Number(importe.replace(',', '.')) || 0;
   const gananciaNumero = Number(gananciaPotencial.replace(',', '.')) || 0;
   const hayPartidosActivos = partidos.some((partido) => partido.local.trim() && partido.visitante.trim());
+  const boletosOcultosHistorial = boletosArchivados.filter((boleto) => boleto.ocultoHistorial);
+  const boletosVisiblesHistorial = boletosArchivados.filter((boleto) => !boleto.ocultoHistorial);
+  const listaHistorial = mostrarOcultosHistorial ? boletosOcultosHistorial : boletosVisiblesHistorial;
 
   return (
     <section style={{ width: '100%', maxWidth: 760, margin: '24px auto 0', paddingBottom: 30 }}>
       <div style={{ marginBottom: 18 }}>
         <div style={{ color: '#0047b3', fontSize: 24, fontWeight: 850 }}>🎟️ {vista === 'boletos' ? 'Quinielas' : vista === 'estadisticas' ? 'Estadísticas de quinielas' : 'Historial de quinielas'}</div>
-        <div style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>{vista === 'boletos' ? 'Guarda tus combinaciones y sigue los resultados.' : vista === 'estadisticas' ? 'Resumen de partidos, apuestas y balance acumulado.' : 'Consulta los boletos que has guardado en el historial.'}</div>
+        <div style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>{vista === 'boletos' ? 'Guarda tus combinaciones y sigue los resultados.' : vista === 'estadisticas' ? 'Resumen de partidos, apuestas y balance acumulado.' : 'Oculta los boletos de prueba; seguirán guardados y contando en estadísticas.'}</div>
       </div>
 
       {vista === 'historial' ? (
         cargando ? (
           <div style={{ textAlign: 'center', color: '#64748b', padding: 24 }}>Cargando historial…</div>
-        ) : boletosArchivados.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 28 }}>Todavía no hay boletos guardados en el historial.</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-            {boletosArchivados.map((boleto) => {
+          <>
+                {boletosOcultosHistorial.length > 0 && (
+                  <button type="button" onClick={() => setMostrarOcultosHistorial((mostrar) => !mostrar)} style={{ width: '100%', marginBottom: 12, border: '1px solid #cbd5e1', borderRadius: 10, padding: '11px 14px', background: '#f8fafc', color: '#334155', fontWeight: 750, fontSize: 13, cursor: 'pointer' }}>
+                    {mostrarOcultosHistorial ? '← Volver al historial' : `Ver boletos ocultos (${boletosOcultosHistorial.length})`}
+                  </button>
+                )}
+                {mensaje && <div role="status" style={{ marginBottom: 12, color: mensaje.toLowerCase().includes('no se pudo') ? '#b91c1c' : '#1d4ed8', fontSize: 13 }}>{mensaje}</div>}
+                {boletosArchivados.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: '#94a3b8', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 28 }}>Todavía no hay boletos guardados en el historial.</div>
+                ) : listaHistorial.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: '#64748b', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 24 }}>{mostrarOcultosHistorial ? 'No hay boletos ocultos.' : 'No hay boletos visibles. Puedes consultar los ocultos con el botón de arriba.'}</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+            {listaHistorial.map((boleto) => {
               const importeBoleto = Number(boleto.importe) || 0;
               const cuotaBoleto = Number(boleto.cuota) || 0;
               const fallado = boleto.partidos.some((partido) => partido.resultado === 'fallado');
@@ -488,12 +532,15 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
               const abierto = boletosHistorialAbiertos.has(boleto.id);
               return (
                 <article key={boleto.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 15, padding: 15, boxShadow: '0 2px 8px rgba(15,23,42,.04)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <button type="button" onClick={() => alternarBoletoHistorial(boleto.id)} aria-expanded={abierto} aria-controls={`detalle-historial-${boleto.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flex: '1 1 180px', minWidth: 0, border: 0, padding: 0, background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
                       <span style={{ minWidth: 0 }}><span style={{ display: 'block', fontWeight: 800, fontSize: 16, color: '#0f172a', overflowWrap: 'anywhere' }}>{boleto.nombre}</span><span style={{ display: 'block', color: '#64748b', fontSize: 12, marginTop: 3 }}>{new Date(`${boleto.fecha}T12:00:00`).toLocaleDateString('es-ES')} · {boleto.partidos.length} partidos</span></span>
                       <span aria-hidden="true" style={{ flexShrink: 0, color: '#64748b', fontSize: 22, lineHeight: 1 }}>{abierto ? '⌃' : '⌄'}</span>
                     </button>
-                    <span style={{ borderRadius: 20, padding: '5px 10px', background: fallado ? '#fef2f2' : acertado ? '#f0fdf4' : '#fffbeb', color: fallado ? '#b91c1c' : acertado ? '#15803d' : '#a16207', fontWeight: 800, fontSize: 12 }}>{estado}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                      <span style={{ borderRadius: 20, padding: '5px 10px', background: fallado ? '#fef2f2' : acertado ? '#f0fdf4' : '#fffbeb', color: fallado ? '#b91c1c' : acertado ? '#15803d' : '#a16207', fontWeight: 800, fontSize: 12 }}>{estado}</span>
+                      <button type="button" onClick={() => cambiarVisibilidadHistorial(boleto, !mostrarOcultosHistorial)} aria-label={mostrarOcultosHistorial ? `Restaurar ${boleto.nombre} al historial` : `Ocultar ${boleto.nombre} del historial`} style={{ minHeight: 38, border: '1px solid #cbd5e1', borderRadius: 8, padding: '8px 10px', background: mostrarOcultosHistorial ? '#f0fdf4' : '#f8fafc', color: mostrarOcultosHistorial ? '#15803d' : '#475569', cursor: 'pointer', fontSize: 12, fontWeight: 750, whiteSpace: 'nowrap' }}>{mostrarOcultosHistorial ? 'Restaurar' : 'Ocultar'}</button>
+                    </div>
                   </div>
                   {abierto && <div id={`detalle-historial-${boleto.id}`}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, background: '#f8fafc', borderRadius: 10, padding: 10, marginTop: 12, fontSize: 12, color: '#475569' }}>
@@ -515,7 +562,9 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                 </article>
               );
             })}
-          </div>
+                  </div>
+                )}
+          </>
         )
       ) : vista === 'estadisticas' ? (
         <>
