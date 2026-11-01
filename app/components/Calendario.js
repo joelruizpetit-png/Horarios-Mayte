@@ -244,6 +244,17 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
     return perteneceAJoel;
   };
 
+  // Mostrar el logo de Biba únicamente en turnos de trabajo de Ana.
+  const esTurnoTrabajoBibaAna = (e) => {
+    if (!e || typeof e === 'string' || esEventoDeporte(e)) return false;
+    const creador = (e.creador || '').toUpperCase().trim();
+    const titulo = (e.titulo || '').toLowerCase();
+    const esTrabajo = e.tipo === 'trabajo' || e.tipo === 'job'
+      || ['trabajo', 'laboral'].includes((e.categoria || '').toLowerCase())
+      || /turno|trabajo|biba/i.test(titulo);
+    return esTrabajo && (creador === 'A' || creador === 'ANA' || creador.includes('ANA'));
+  };
+
   useEffect(() => {
     const docRef = doc(db, "agenda", "datos");
     const cancelarSuscripcion = onSnapshot(docRef, (doc) => {
@@ -801,6 +812,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                 const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
                 const esGoogle = !esAntigua && (nota.esGoogleCalendar || nota.tipo === 'google');
                 const esCondis = esTurnoTrabajoCondisJoel(nota);
+                const esBiba = esTurnoTrabajoBibaAna(nota);
                 // Para eventos de deporte o google: tratamiento específico
                 const creador = (esDeporte || esGoogle) ? '' : (!esAntigua && nota.creador ? nota.creador.toUpperCase() : (esTrabajo ? 'J' : ''));
                 
@@ -899,6 +911,13 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                     </div>
 
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "auto" }}>
+                      {esBiba && (
+                        <img
+                          src="/biba.jpeg"
+                          alt="Biblioteca pública d'Avinyó"
+                          style={{ maxHeight: "24px", width: "auto", objectFit: "contain", display: "block" }}
+                        />
+                      )}
                       {esCondis && (
                         <img 
                           src="/condis.jpg" 

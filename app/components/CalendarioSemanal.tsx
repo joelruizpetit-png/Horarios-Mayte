@@ -218,6 +218,17 @@ export default function CalendarioSemanal({
     return perteneceAJoel;
   };
 
+  // Mostrar el logo de Biba únicamente en turnos de trabajo de Ana.
+  const esTurnoTrabajoBibaAna = (e: Evento | EventoAgendaGC | string | null | undefined): boolean => {
+    if (!e || typeof e === 'string' || esEventoDeporte(e)) return false;
+    const creador = (e.creador || '').toUpperCase().trim();
+    const titulo = (e.titulo || '').toLowerCase();
+    const esTrabajo = e.tipo === 'trabajo' || e.tipo === 'job'
+      || ['trabajo', 'laboral'].includes((e.categoria || '').toLowerCase())
+      || /turno|trabajo|biba/i.test(titulo);
+    return esTrabajo && (creador === 'A' || creador === 'ANA' || creador.includes('ANA'));
+  };
+
   // Conexión en tiempo real con Firestore
   useEffect(() => {
     const docRef = doc(db, "agenda", "datos");
@@ -952,6 +963,7 @@ export default function CalendarioSemanal({
                     const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
                     const esGoogle = !esAntigua && Boolean((nota as any).esGoogleCalendar || (nota as any).tipo === 'google');
                     const esCondis = esTurnoTrabajoCondisJoel(nota);
+                    const esBiba = esTurnoTrabajoBibaAna(nota);
                     const horaFin = !esAntigua ? nota.horaFin : "";
                     // Para eventos de deporte o google: sin inicial J/A
                     const creadorNota = (esDeporte || esGoogle) ? '' : (!esAntigua && (nota as Evento).creador ? (nota as Evento).creador!.toUpperCase() : (esTrabajo ? 'J' : ''));
@@ -1058,6 +1070,13 @@ export default function CalendarioSemanal({
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '8px' }}>
+                          {esBiba && (
+                            <img
+                              src="/biba.jpeg"
+                              alt="Biblioteca pública d'Avinyó"
+                              style={{ maxHeight: '24px', width: 'auto', objectFit: 'contain', display: 'block' }}
+                            />
+                          )}
                           {esCondis && (
                             <img
                               src="/condis.jpg"

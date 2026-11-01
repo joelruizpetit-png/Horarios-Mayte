@@ -115,12 +115,18 @@ function numeroOCR(valor: string | undefined): number | null {
 }
 
 function extraerDatosApuesta(texto: string): { importe: number | null; cuota: number | null; ganancia: number | null } {
-  const importes = [...texto.matchAll(/apostar\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
+  // En el boleto pendiente suele aparecer "Apostar 1,00 €". En el recibo
+  // confirmado aparece "Cantidad" y el total se repite en el resumen final.
+  const importesApostados = [...texto.matchAll(/\b(?:apostar|apostado)\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
+  const importesCantidad = [...texto.matchAll(/\b(?:cantidad|importe)\s*(?:apostada)?\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
   const ganancias = [...texto.matchAll(/ganancias?\s+pot(?:encial(?:es)?)?\.?\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
   const cuotas = [...texto.matchAll(/(?:cuota\s+combinada|combinada)\s*[:\-]?\s*(\d+(?:[.,]\d+)*)/gi)];
-  const importe = numeroOCR(importes.at(-1)?.[1]);
+  // En los recibos confirmados la cuota aparece junto al nombre de la
+  // combinación, por ejemplo "Triple 2.88".
+  const cuotasCombinadas = [...texto.matchAll(/\b(?:doble|triple|cu[aá]druple|quíntuple|sextuple|séxtuple)\s+(\d+[.,]\d{1,3})\b/gi)];
+  const importe = numeroOCR(importesApostados.at(-1)?.[1] ?? importesCantidad.at(-1)?.[1]);
   const ganancia = numeroOCR(ganancias.at(-1)?.[1]);
-  const cuotaExplicita = numeroOCR(cuotas.at(-1)?.[1]);
+  const cuotaExplicita = numeroOCR(cuotas.at(-1)?.[1] ?? cuotasCombinadas.at(-1)?.[1]);
   const cuota = cuotaExplicita ?? (importe && ganancia ? ganancia / importe : null);
   return { importe, cuota, ganancia: ganancia ?? (importe && cuota ? importe * cuota : null) };
 }
