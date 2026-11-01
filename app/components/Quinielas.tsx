@@ -118,14 +118,25 @@ function extraerDatosApuesta(texto: string): { importe: number | null; cuota: nu
   // En el boleto pendiente suele aparecer "Apostar 1,00 €". En el recibo
   // confirmado aparece "Cantidad" y el total se repite en el resumen final.
   const importesApostados = [...texto.matchAll(/\b(?:apostar|apostado)\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
-  const importesCantidad = [...texto.matchAll(/\b(?:cantidad|importe)\s*(?:apostada)?\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
+  const importesCantidad = [...texto.matchAll(/\b(?:cantidad|importe)\s*(?:apostada)?\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€?/gi)];
   const ganancias = [...texto.matchAll(/ganancias?\s+pot(?:encial(?:es)?)?\.?\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
   const cuotas = [...texto.matchAll(/(?:cuota\s+combinada|combinada)\s*[:\-]?\s*(\d+(?:[.,]\d+)*)/gi)];
+  // En la pantalla de confirmación, OCR a veces lee primero ambas etiquetas
+  // en columnas y luego sus importes juntos: "Cantidad Ganancias pot." / "2,00€ 5,76€".
+  const lineas = texto.split(/\r?\n/);
+  const resumenDosColumnas = lineas.flatMap((linea, indice) => {
+    const importesFila = [...linea.matchAll(/(\d+(?:[.,]\d{1,2})?)\s*€/g)];
+    if (importesFila.length < 2) return [];
+    const contexto = lineas.slice(Math.max(0, indice - 4), indice + 1).join(' ');
+    if (!/\bcantidad\b/i.test(contexto) || !/ganancias?\s+pot(?:encial(?:es)?)?/i.test(contexto)) return [];
+    return [[importesFila[0][1], importesFila[1][1]]];
+  }).at(-1);
   // En los recibos confirmados la cuota aparece junto al nombre de la
-  // combinación, por ejemplo "Triple 2.88".
+  // combinación y el importe en la misma fila, por ejemplo "Triple 2.88 2,00 €".
+  const resumenCombinadas = [...texto.matchAll(/\b(?:doble|triple|cu[aá]druple|quíntuple|sextuple|séxtuple)\s+(\d+[.,]\d{1,3})\s+(\d+(?:[.,]\d{1,2})?)\s*€?/gi)];
   const cuotasCombinadas = [...texto.matchAll(/\b(?:doble|triple|cu[aá]druple|quíntuple|sextuple|séxtuple)\s+(\d+[.,]\d{1,3})\b/gi)];
-  const importe = numeroOCR(importesApostados.at(-1)?.[1] ?? importesCantidad.at(-1)?.[1]);
-  const ganancia = numeroOCR(ganancias.at(-1)?.[1]);
+  const importe = numeroOCR(importesApostados.at(-1)?.[1] ?? resumenDosColumnas?.[0] ?? importesCantidad.at(-1)?.[1] ?? resumenCombinadas.at(-1)?.[2]);
+  const ganancia = numeroOCR(resumenDosColumnas?.[1] ?? ganancias.at(-1)?.[1]);
   const cuotaExplicita = numeroOCR(cuotas.at(-1)?.[1] ?? cuotasCombinadas.at(-1)?.[1]);
   const cuota = cuotaExplicita ?? (importe && ganancia ? ganancia / importe : null);
   return { importe, cuota, ganancia: ganancia ?? (importe && cuota ? importe * cuota : null) };
