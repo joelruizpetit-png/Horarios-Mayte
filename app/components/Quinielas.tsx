@@ -811,7 +811,9 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                 const estado = !completado ? 'Pendiente' : perdido ? 'Fallado' : 'Acertado';
                 const beneficioBoleto = !completado ? null : perdido ? -importeBoleto : importeBoleto * (cuotaBoleto - 1);
                 const abierto = boletosAbiertos.has(boleto.id);
-                return <article key={boleto.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 15, padding: 15, boxShadow: '0 2px 8px rgba(15,23,42,.04)' }}>
+                const fondoTarjeta = estado === 'Acertado' ? '#dcfce7' : estado === 'Fallado' ? '#fee2e2' : '#fff';
+                const bordeTarjeta = estado === 'Acertado' ? '#86efac' : estado === 'Fallado' ? '#fca5a5' : '#e2e8f0';
+                return <article key={boleto.id} style={{ background: fondoTarjeta, border: `1px solid ${bordeTarjeta}`, borderRadius: 15, padding: 15, boxShadow: '0 2px 8px rgba(15,23,42,.04)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
                     <button type="button" onClick={() => alternarBoleto(boleto.id)} aria-expanded={abierto} aria-controls={`detalle-boleto-${boleto.id}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, flex: '1 1 180px', minWidth: 0, border: 0, padding: '0 10px 0 0', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
                       <span style={{ minWidth: 0 }}><span style={{ display: 'block', fontWeight: 800, fontSize: 16, color: '#0f172a', overflowWrap: 'anywhere' }}>{boleto.nombre}</span><span style={{ display: 'block', color: '#64748b', fontSize: 12, marginTop: 3 }}>{new Date(`${boleto.fecha}T12:00:00`).toLocaleDateString('es-ES')} · {boleto.partidos.length} partidos</span></span>
