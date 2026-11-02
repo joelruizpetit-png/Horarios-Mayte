@@ -46,6 +46,16 @@ export default function HeaderSofascore({
   onCambiarPinZonaPrivada
 }: HeaderSofascoreProps) {
   const nombreUsuario = formatearNombreFamiliar(usuario?.displayName, usuario?.email);
+  const [reiniciandoEstadisticas, setReiniciandoEstadisticas] = React.useState(false);
+
+  React.useEffect(() => {
+    const actualizarEstadoReinicio = (evento: Event) => {
+      const detalle = (evento as CustomEvent<{ reiniciando?: boolean }>).detail;
+      setReiniciandoEstadisticas(Boolean(detalle?.reiniciando));
+    };
+    window.addEventListener('quinielas:estado-reinicio', actualizarEstadoReinicio);
+    return () => window.removeEventListener('quinielas:estado-reinicio', actualizarEstadoReinicio);
+  }, []);
 
   return (
     <header style={{
@@ -439,13 +449,38 @@ export default function HeaderSofascore({
           </div>
         </div>
       ) : seccionActiva === 'quinielas' || seccionActiva === 'quinielas-estadisticas' || seccionActiva === 'quinielas-historial' ? (
-        <div style={{ backgroundColor: '#fffbeb', borderBottom: '1px solid #fde68a', display: 'flex', justifyContent: 'center', width: '100%', padding: '10px 16px' }}>
-          <div style={{ width: '100%', maxWidth: '500px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ backgroundColor: '#fffbeb', borderBottom: '1px solid #fde68a', display: 'flex', justifyContent: 'center', width: '100%', padding: '10px 12px' }}>
+          <div style={{ width: '100%', maxWidth: '500px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <span style={{ fontSize: 18 }}>🎟️</span>
-              <div><span style={{ display: 'block', fontSize: 14, fontWeight: 800, color: '#92400e' }}>Quinielas</span><span style={{ display: 'block', fontSize: 11, color: '#64748b' }}>{seccionActiva === 'quinielas-estadisticas' ? 'Estadísticas' : seccionActiva === 'quinielas-historial' ? 'Historial' : 'Mis boletos'}</span></div>
+              <div><span style={{ display: 'block', fontSize: 14, fontWeight: 800, color: '#92400e', lineHeight: 1.15 }}>Quinielas</span><span style={{ display: 'block', fontSize: 11, color: '#64748b', lineHeight: 1.15 }}>{seccionActiva === 'quinielas-estadisticas' ? 'Estadísticas' : seccionActiva === 'quinielas-historial' ? 'Historial' : 'Mis boletos'}</span></div>
             </div>
-            {onCambiarSeccion && <button onClick={() => onCambiarSeccion('planificador')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 12, fontWeight: 700, backgroundColor: '#fff', color: '#0047b3', border: '1px solid #bfdbfe', borderRadius: 8, cursor: 'pointer' }}>📅 Ver Agenda</button>}
+            {seccionActiva === 'quinielas-estadisticas' && (
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('quinielas:reiniciar-estadisticas'))}
+                disabled={reiniciandoEstadisticas}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '6px 9px',
+                  fontSize: 11,
+                  fontWeight: 750,
+                  backgroundColor: '#fff',
+                  color: '#b91c1c',
+                  border: '1px solid #fecaca',
+                  borderRadius: 8,
+                  cursor: reiniciandoEstadisticas ? 'wait' : 'pointer',
+                  opacity: reiniciandoEstadisticas ? 0.65 : 1,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
+                }}
+              >
+                {reiniciandoEstadisticas ? 'Reiniciando…' : '↻ Reiniciar estadísticas'}
+              </button>
+            )}
+            {onCambiarSeccion && <button onClick={() => onCambiarSeccion('planificador')} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', fontSize: 11, fontWeight: 700, backgroundColor: '#fff', color: '#0047b3', border: '1px solid #bfdbfe', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>📅 Ver Agenda</button>}
           </div>
         </div>
       ) : seccionActiva === 'configuracion' ? (

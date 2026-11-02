@@ -201,6 +201,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const [guardando, setGuardando] = useState(false);
   const [reiniciandoEstadisticas, setReiniciandoEstadisticas] = useState(false);
   const [reinicioEstadisticasEn, setReinicioEstadisticasEn] = useState('');
+  const [paginaEstadisticas, setPaginaEstadisticas] = useState(0);
   const [mensaje, setMensaje] = useState('');
 
   useEffect(() => onSnapshot(collection(db, COLECCION), (snapshot) => {
@@ -285,6 +286,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     if (!confirmado) return;
     const fechaReinicio = new Date().toISOString();
     setReiniciandoEstadisticas(true);
+    window.dispatchEvent(new CustomEvent('quinielas:estado-reinicio', { detail: { reiniciando: true } }));
     try {
       await setDoc(doc(db, COLECCION_CONFIGURACION, 'saldo'), {
         saldoInicial: 0,
@@ -299,8 +301,19 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
       setMensaje('No se pudieron reiniciar las estadísticas. Inténtalo de nuevo.');
     } finally {
       setReiniciandoEstadisticas(false);
+      window.dispatchEvent(new CustomEvent('quinielas:estado-reinicio', { detail: { reiniciando: false } }));
     }
   };
+
+  useEffect(() => {
+    const manejarReinicioExterno = () => {
+      if (!reiniciandoEstadisticas) {
+        void reiniciarEstadisticas();
+      }
+    };
+    window.addEventListener('quinielas:reiniciar-estadisticas', manejarReinicioExterno);
+    return () => window.removeEventListener('quinielas:reiniciar-estadisticas', manejarReinicioExterno);
+  });
 
   const resumen = useMemo(() => {
     const todosPartidos = boletosEstadisticas.flatMap((boleto) => boleto.partidos || []);
@@ -502,10 +515,29 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   };
 
   const tarjeta = (etiqueta: string, valor: string, color: string, fondo: string) => (
-    <div key={etiqueta} style={{ background: fondo, border: `1px solid ${color}25`, borderRadius: 14, padding: '16px 18px', minWidth: 135, flex: '1 1 140px' }}>
-      <div style={{ color: '#64748b', fontSize: 12, fontWeight: 700 }}>{etiqueta}</div>
-      <div style={{ color, fontSize: 23, fontWeight: 800, marginTop: 6 }}>{valor}</div>
+    <div key={etiqueta} style={{ background: fondo, border: `1px solid ${color}25`, borderRadius: 12, padding: '10px 10px', minWidth: 0 }}>
+      <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, lineHeight: 1.2 }}>{etiqueta}</div>
+      <div style={{ color, fontSize: 17, fontWeight: 800, marginTop: 4, lineHeight: 1.15, overflowWrap: 'anywhere' }}>{valor}</div>
     </div>
+  );
+
+  const tarjetasEstadisticas = [
+    tarjeta('Partidos insertados', `${resumen.total}`, '#0047b3', '#eff6ff'),
+    tarjeta('Acertados', `${resumen.acertados}`, '#15803d', '#f0fdf4'),
+    tarjeta('Fallados', `${resumen.fallados}`, '#b91c1c', '#fef2f2'),
+    tarjeta('Boletos acertados', `${resumen.boletosAcertados}`, '#15803d', '#f0fdf4'),
+    tarjeta('Boletos fallados', `${resumen.boletosFallados}`, '#b91c1c', '#fef2f2'),
+    tarjeta('Total apostado', euros(resumen.apostado), '#7c3aed', '#f5f3ff'),
+    tarjeta('Cuota media', resumen.cuotaMedia ? resumen.cuotaMedia.toFixed(2) : '—', '#0369a1', '#f0f9ff'),
+    tarjeta('Beneficio / pérdida', euros(resumen.beneficio), resumen.beneficio >= 0 ? '#15803d' : '#b91c1c', resumen.beneficio >= 0 ? '#f0fdf4' : '#fef2f2'),
+    tarjeta('Saldo acumulado', euros(saldosPorBoleto.actual), saldosPorBoleto.actual >= saldoInicialNumero ? '#15803d' : '#b91c1c', saldosPorBoleto.actual >= saldoInicialNumero ? '#f0fdf4' : '#fef2f2'),
+  ];
+  const TARJETAS_POR_PAGINA = 9;
+  const totalPaginasEstadisticas = Math.max(1, Math.ceil(tarjetasEstadisticas.length / TARJETAS_POR_PAGINA));
+  const paginaEstadisticasActual = Math.min(paginaEstadisticas, totalPaginasEstadisticas - 1);
+  const tarjetasEstadisticasVisibles = tarjetasEstadisticas.slice(
+    paginaEstadisticasActual * TARJETAS_POR_PAGINA,
+    (paginaEstadisticasActual + 1) * TARJETAS_POR_PAGINA,
   );
 
   const importeNumero = Number(importe.replace(',', '.')) || 0;
@@ -585,21 +617,59 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
         )
       ) : vista === 'estadisticas' ? (
         <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-            <button type="button" onClick={reiniciarEstadisticas} disabled={reiniciandoEstadisticas} style={{ border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', background: '#fff', color: '#b91c1c', fontWeight: 750, cursor: reiniciandoEstadisticas ? 'wait' : 'pointer', opacity: reiniciandoEstadisticas ? 0.65 : 1 }}>
-              {reiniciandoEstadisticas ? 'Reiniciando…' : '↻ Reiniciar estadísticas'}
-            </button>
+          {mensaje && <div role="status" style={{ marginBottom: 12, color: mensaje.toLowerCase().includes('no se pud') ? '#b91c1c' : '#1d4ed8', fontSize: 13 }}>{mensaje}</div>}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginBottom: 14 }}>
+            {tarjetasEstadisticasVisibles}
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
-            {tarjeta('Partidos insertados', `${resumen.total}`, '#0047b3', '#eff6ff')}
-            {tarjeta('Acertados', `${resumen.acertados}`, '#15803d', '#f0fdf4')}
-            {tarjeta('Fallados', `${resumen.fallados}`, '#b91c1c', '#fef2f2')}
-            {tarjeta('Boletos acertados', `${resumen.boletosAcertados}`, '#15803d', '#f0fdf4')}
-            {tarjeta('Boletos fallados', `${resumen.boletosFallados}`, '#b91c1c', '#fef2f2')}
-            {tarjeta('Total apostado', euros(resumen.apostado), '#7c3aed', '#f5f3ff')}
-            {tarjeta('Cuota media', resumen.cuotaMedia ? resumen.cuotaMedia.toFixed(2) : '—', '#0369a1', '#f0f9ff')}
-            {tarjeta('Beneficio / pérdida', euros(resumen.beneficio), resumen.beneficio >= 0 ? '#15803d' : '#b91c1c', resumen.beneficio >= 0 ? '#f0fdf4' : '#fef2f2')}
-            {tarjeta('Saldo acumulado', euros(saldosPorBoleto.actual), saldosPorBoleto.actual >= saldoInicialNumero ? '#15803d' : '#b91c1c', saldosPorBoleto.actual >= saldoInicialNumero ? '#f0fdf4' : '#fef2f2')}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginBottom: 14 }}>
+            <button
+              type="button"
+              onClick={() => setPaginaEstadisticas((actual) => Math.max(0, Math.min(actual, totalPaginasEstadisticas - 1) - 1))}
+              disabled={paginaEstadisticasActual === 0}
+              aria-label="Estadísticas anteriores"
+              title="Estadísticas anteriores"
+              style={{
+                width: 38,
+                height: 36,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 10,
+                border: '1px solid #cbd5e1',
+                background: paginaEstadisticasActual === 0 ? '#f8fafc' : '#ffffff',
+                color: paginaEstadisticasActual === 0 ? '#94a3b8' : '#0047b3',
+                fontSize: 15,
+                fontWeight: 800,
+                cursor: paginaEstadisticasActual === 0 ? 'default' : 'pointer',
+                boxShadow: paginaEstadisticasActual === 0 ? 'none' : '0 1px 3px rgba(15, 23, 42, 0.06)'
+              }}
+            >
+              ◀
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaginaEstadisticas((actual) => Math.min(totalPaginasEstadisticas - 1, Math.min(actual, totalPaginasEstadisticas - 1) + 1))}
+              disabled={paginaEstadisticasActual >= totalPaginasEstadisticas - 1}
+              aria-label="Estadísticas siguientes"
+              title="Estadísticas siguientes"
+              style={{
+                width: 38,
+                height: 36,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 10,
+                border: '1px solid #cbd5e1',
+                background: paginaEstadisticasActual >= totalPaginasEstadisticas - 1 ? '#f8fafc' : '#ffffff',
+                color: paginaEstadisticasActual >= totalPaginasEstadisticas - 1 ? '#94a3b8' : '#0047b3',
+                fontSize: 15,
+                fontWeight: 800,
+                cursor: paginaEstadisticasActual >= totalPaginasEstadisticas - 1 ? 'default' : 'pointer',
+                boxShadow: paginaEstadisticasActual >= totalPaginasEstadisticas - 1 ? 'none' : '0 1px 3px rgba(15, 23, 42, 0.06)'
+              }}
+            >
+              ▶
+            </button>
           </div>
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16, color: '#64748b', fontSize: 13 }}>
             El balance incluye los boletos con algún partido fallado y los boletos con todos los partidos acertados ({resumen.liquidados} resueltos). Los boletos aún pendientes quedan fuera del beneficio o pérdida.
