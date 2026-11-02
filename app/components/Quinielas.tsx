@@ -568,9 +568,9 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   };
 
   const tarjeta = (etiqueta: string, valor: string, color: string, fondo: string) => (
-    <div key={etiqueta} style={{ background: fondo, border: `1px solid ${color}25`, borderRadius: 12, padding: '10px 10px', minWidth: 0 }}>
-      <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, lineHeight: 1.2 }}>{etiqueta}</div>
-      <div style={{ color, fontSize: 17, fontWeight: 800, marginTop: 4, lineHeight: 1.15, overflowWrap: 'anywhere' }}>{valor}</div>
+    <div key={etiqueta} style={{ background: fondo, border: `1px solid ${color}25`, borderRadius: 15, padding: '16px 12px', minWidth: 0, minHeight: 112, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
+      <div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>{etiqueta}</div>
+      <div style={{ color, fontSize: 20, fontWeight: 800, marginTop: 10, lineHeight: 1.15, overflowWrap: 'anywhere' }}>{valor}</div>
     </div>
   );
 
@@ -676,10 +676,13 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
       ) : vista === 'estadisticas' ? (
         <>
           {mensaje && <div role="status" style={{ marginBottom: 12, color: mensaje.toLowerCase().includes('no se pud') ? '#b91c1c' : '#1d4ed8', fontSize: 13 }}>{mensaje}</div>}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', rowGap: 14, columnGap: 10, marginBottom: 16 }}>
             {tarjetasEstadisticasVisibles}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 8, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 16 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginRight: 2 }}>
+              Página {paginaEstadisticasActual + 1} de {totalPaginasEstadisticas}
+            </span>
             <button
               type="button"
               onClick={() => setPaginaEstadisticas((actual) => Math.max(0, Math.min(actual, totalPaginasEstadisticas - 1) - 1))}
@@ -687,8 +690,8 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
               aria-label="Estadísticas anteriores"
               title="Estadísticas anteriores"
               style={{
-                width: 38,
-                height: 36,
+                width: 42,
+                height: 38,
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -711,8 +714,8 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
               aria-label="Estadísticas siguientes"
               title="Estadísticas siguientes"
               style={{
-                width: 38,
-                height: 36,
+                width: 42,
+                height: 38,
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -728,9 +731,6 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
             >
               ▶
             </button>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginLeft: 4 }}>
-              Página {paginaEstadisticasActual + 1} de {totalPaginasEstadisticas}
-            </span>
           </div>
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16, color: '#64748b', fontSize: 13 }}>
             El balance incluye los boletos con algún partido fallado y los boletos con todos los partidos acertados ({resumen.liquidados} resueltos). Los boletos aún pendientes quedan fuera del beneficio o pérdida.
