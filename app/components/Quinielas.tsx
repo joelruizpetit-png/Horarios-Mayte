@@ -46,6 +46,7 @@ const nuevoPartido = (local = '', visitante = ''): PartidoQuiniela => ({
   resultado: 'pendiente',
 });
 const euros = (valor: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(valor);
+const porcentaje = (valor: number) => `${new Intl.NumberFormat('es-ES', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(valor)} %`;
 
 function normalizarPronostico(valor: unknown): Pronostico[] {
   const opciones = Array.isArray(valor) ? valor : typeof valor === 'string' ? valor.split('') : [];
@@ -201,6 +202,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const [guardando, setGuardando] = useState(false);
   const [reiniciandoEstadisticas, setReiniciandoEstadisticas] = useState(false);
   const [reinicioEstadisticasEn, setReinicioEstadisticasEn] = useState('');
+  const [rachaMaximaGuardada, setRachaMaximaGuardada] = useState(0);
   const [paginaEstadisticas, setPaginaEstadisticas] = useState(0);
   const [mensaje, setMensaje] = useState('');
 
@@ -231,6 +233,8 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     const guardado = Number(configuracion.saldoInicial);
     if (Number.isFinite(guardado) && guardado >= 0) setSaldoInicial(guardado.toFixed(2));
     setReinicioEstadisticasEn(typeof configuracion.reinicioEstadisticasEn === 'string' ? configuracion.reinicioEstadisticasEn : '');
+    const rachaGuardada = Number(configuracion.rachaMaxima);
+    setRachaMaximaGuardada(Number.isFinite(rachaGuardada) && rachaGuardada >= 0 ? Math.floor(rachaGuardada) : 0);
   }, (error) => {
     console.error('No se pudo cargar el saldo inicial:', error);
     setMensaje('No se pudo cargar el saldo inicial.');
@@ -290,10 +294,12 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     try {
       await setDoc(doc(db, COLECCION_CONFIGURACION, 'saldo'), {
         saldoInicial: 0,
+        rachaMaxima: 0,
         reinicioEstadisticasEn: fechaReinicio,
         actualizadoEn: fechaReinicio,
       }, { merge: true });
       setSaldoInicial('0.00');
+      setRachaMaximaGuardada(0);
       setReinicioEstadisticasEn(fechaReinicio);
       setMensaje('Estadísticas reiniciadas. Los nuevos boletos empezarán a contar desde cero.');
     } catch (error) {
@@ -317,19 +323,49 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
 
   const resumen = useMemo(() => {
     const todosPartidos = boletosEstadisticas.flatMap((boleto) => boleto.partidos || []);
-    const cuotas = boletosEstadisticas.filter((boleto) => Number(boleto.cuota) > 0);
     const apostado = boletosEstadisticas.reduce((total, boleto) => total + (Number(boleto.importe) || 0), 0);
-    const boletosAcertados = boletosEstadisticas.filter((boleto) =>
+    const listaBoletosAcertados = boletosEstadisticas.filter((boleto) =>
       (boleto.partidos || []).length > 0 && boleto.partidos.every((partido) => partido.resultado === 'acertado')
-    ).length;
-    const boletosFallados = boletosEstadisticas.filter((boleto) =>
+    );
+    const listaBoletosFallados = boletosEstadisticas.filter((boleto) =>
       (boleto.partidos || []).length > 0 && boleto.partidos.some((partido) => partido.resultado === 'fallado')
-    ).length;
+    );
+    const boletosAcertados = listaBoletosAcertados.length;
+    const boletosFallados = listaBoletosFallados.length;
+    const cuotasAcertados = listaBoletosAcertados.filter((boleto) => Number(boleto.cuota) > 0);
+    const cuotasFallados = listaBoletosFallados.filter((boleto) => Number(boleto.cuota) > 0);
+    const cuotaMediaAcertados = cuotasAcertados.length
+      ? cuotasAcertados.reduce((total, boleto) => total + Number(boleto.cuota), 0) / cuotasAcertados.length
+      : 0;
+    const cuotaMediaFallados = cuotasFallados.length
+      ? cuotasFallados.reduce((total, boleto) => total + Number(boleto.cuota), 0) / cuotasFallados.length
+      : 0;
     const liquidados = boletosEstadisticas.filter((boleto) => (boleto.partidos || []).length > 0 && (boleto.partidos.some((partido) => partido.resultado === 'fallado') || boleto.partidos.every((partido) => partido.resultado === 'acertado')));
     const beneficio = liquidados.reduce((total, boleto) => {
       const perdido = boleto.partidos.some((partido) => partido.resultado === 'fallado');
       return total + (perdido ? -(Number(boleto.importe) || 0) : (Number(boleto.importe) || 0) * ((Number(boleto.cuota) || 0) - 1));
     }, 0);
+    const yieldPorcentaje = apostado > 0 ? (beneficio / apostado) * 100 : 0;
+    const winRate = boletosEstadisticas.length > 0 ? (boletosAcertados / boletosEstadisticas.length) * 100 : 0;
+
+    const liquidadosOrdenados = [...liquidados].sort((a, b) =>
+      (a.resueltoEn || a.creadoEn || '').localeCompare(b.resueltoEn || b.creadoEn || '')
+    );
+    let rachaActual = 0;
+    let rachaMaximaCalculada = 0;
+    for (const boleto of liquidadosOrdenados) {
+      const esFallado = (boleto.partidos || []).some((partido) => partido.resultado === 'fallado');
+      if (esFallado) {
+        rachaActual = 0;
+      } else {
+        rachaActual += 1;
+        if (rachaActual > rachaMaximaCalculada) {
+          rachaMaximaCalculada = rachaActual;
+        }
+      }
+    }
+    const rachaMaxima = Math.max(rachaMaximaGuardada, rachaMaximaCalculada);
+
     return {
       total: todosPartidos.length,
       acertados: todosPartidos.filter((partido) => partido.resultado === 'acertado').length,
@@ -337,11 +373,28 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
       boletosAcertados,
       boletosFallados,
       apostado,
-      cuotaMedia: cuotas.length ? cuotas.reduce((total, boleto) => total + Number(boleto.cuota), 0) / cuotas.length : 0,
+      cuotaMediaAcertados,
+      cuotaMediaFallados,
       beneficio,
+      yieldPorcentaje,
+      rachaActual,
+      rachaMaxima,
+      rachaMaximaCalculada,
+      winRate,
       liquidados: liquidados.length,
     };
-  }, [boletosEstadisticas]);
+  }, [boletosEstadisticas, rachaMaximaGuardada]);
+
+  useEffect(() => {
+    if (resumen.rachaMaximaCalculada > rachaMaximaGuardada) {
+      setDoc(doc(db, COLECCION_CONFIGURACION, 'saldo'), {
+        rachaMaxima: resumen.rachaMaximaCalculada,
+        actualizadoEn: new Date().toISOString(),
+      }, { merge: true }).catch((error) => {
+        console.error('No se pudo actualizar la racha máxima:', error);
+      });
+    }
+  }, [resumen.rachaMaximaCalculada, rachaMaximaGuardada]);
 
   const procesarFoto = async (evento: ChangeEvent<HTMLInputElement>) => {
     const archivos = Array.from(evento.target.files || []);
@@ -528,9 +581,14 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     tarjeta('Boletos acertados', `${resumen.boletosAcertados}`, '#15803d', '#f0fdf4'),
     tarjeta('Boletos fallados', `${resumen.boletosFallados}`, '#b91c1c', '#fef2f2'),
     tarjeta('Total apostado', euros(resumen.apostado), '#7c3aed', '#f5f3ff'),
-    tarjeta('Cuota media', resumen.cuotaMedia ? resumen.cuotaMedia.toFixed(2) : '—', '#0369a1', '#f0f9ff'),
+    tarjeta('Cuota media acertados', resumen.cuotaMediaAcertados ? resumen.cuotaMediaAcertados.toFixed(2) : '—', '#0369a1', '#f0f9ff'),
+    tarjeta('Cuota media fallados', resumen.cuotaMediaFallados ? resumen.cuotaMediaFallados.toFixed(2) : '—', '#be123c', '#fff1f2'),
     tarjeta('Beneficio / pérdida', euros(resumen.beneficio), resumen.beneficio >= 0 ? '#15803d' : '#b91c1c', resumen.beneficio >= 0 ? '#f0fdf4' : '#fef2f2'),
     tarjeta('Saldo acumulado', euros(saldosPorBoleto.actual), saldosPorBoleto.actual >= saldoInicialNumero ? '#15803d' : '#b91c1c', saldosPorBoleto.actual >= saldoInicialNumero ? '#f0fdf4' : '#fef2f2'),
+    tarjeta('Yield', porcentaje(resumen.yieldPorcentaje), resumen.yieldPorcentaje >= 0 ? '#15803d' : '#b91c1c', resumen.yieldPorcentaje >= 0 ? '#f0fdf4' : '#fef2f2'),
+    tarjeta('Racha acertados', `${resumen.rachaActual}`, '#d97706', '#fffbeb'),
+    tarjeta('Racha máxima', `${resumen.rachaMaxima}`, '#0284c7', '#f0f9ff'),
+    tarjeta('Win rate', porcentaje(resumen.winRate), '#4f46e5', '#eef2ff'),
   ];
   const TARJETAS_POR_PAGINA = 9;
   const totalPaginasEstadisticas = Math.max(1, Math.ceil(tarjetasEstadisticas.length / TARJETAS_POR_PAGINA));
@@ -670,6 +728,9 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
             >
               ▶
             </button>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginLeft: 4 }}>
+              Página {paginaEstadisticasActual + 1} de {totalPaginasEstadisticas}
+            </span>
           </div>
           <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16, color: '#64748b', fontSize: 13 }}>
             El balance incluye los boletos con algún partido fallado y los boletos con todos los partidos acertados ({resumen.liquidados} resueltos). Los boletos aún pendientes quedan fuera del beneficio o pérdida.
