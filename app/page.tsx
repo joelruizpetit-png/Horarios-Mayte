@@ -85,12 +85,12 @@ export default function Home() {
         }
         setTabActiva('general'); // Pestaña 'General' activa por defecto al iniciar sesión
 
-        // Sincronizar automáticamente en Firestore el menú escolar de octubre de Alma si no se ha hecho
-        const syncOct = typeof window !== 'undefined' ? localStorage.getItem('menu_octubre_2026_sincronizado_v1_3_0') : 'true';
-        if (!syncOct && user.email) {
+        // Sincronizar automáticamente en Firestore el menú escolar de octubre y noviembre de Alma si no se ha hecho
+        const syncNov = typeof window !== 'undefined' ? localStorage.getItem('menu_noviembre_2026_sincronizado_v1_4_0') : 'true';
+        if (!syncNov && user.email) {
           sincronizarMenuOctubreFirestore(db, user.email).then((res) => {
             if (res.exito && typeof window !== 'undefined') {
-              localStorage.setItem('menu_octubre_2026_sincronizado_v1_3_0', 'true');
+              localStorage.setItem('menu_noviembre_2026_sincronizado_v1_4_0', 'true');
             }
           });
         }

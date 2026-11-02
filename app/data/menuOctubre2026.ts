@@ -168,8 +168,163 @@ export const MENU_OCTUBRE_2026: MenuDiaEscolar[] = [
   }
 ];
 
+export const MENU_NOVIEMBRE_2026: MenuDiaEscolar[] = [
+  {
+    fecha: "2026-11-02",
+    primerPlato: "Festiu escolar",
+    segundoPlato: "Sense servei de menjador",
+    postre: "Festiu",
+    observaciones: "Dia no lectiu - Festiu escolar"
+  },
+  {
+    fecha: "2026-11-03",
+    primerPlato: "Espaguetis integrals amb sofregit de tomàquet i orenga",
+    segundoPlato: "Truita de carabassó i ceba casolana amb amanida d'enciam i olives",
+    postre: "Iogurt i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6T-10T, 3, 1-3T-6-7-8T-10T-11T | Kcal: 741, Lip: 36.88, Prot: 26.57, HC: 71.81"
+  },
+  {
+    fecha: "2026-11-04",
+    primerPlato: "Crema de blat de moro i porro",
+    segundoPlato: "Pollastre al forn amb salsa barbacoa casolana i amanida d'enciam i brots de soja",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 10-12, 1-3T-6-7T-8T-10T-11T | Kcal: 568, Lip: 23.29, Prot: 25.03, HC: 63.03"
+  },
+  {
+    fecha: "2026-11-05",
+    primerPlato: "Cigrons estofats amb verdures",
+    segundoPlato: "Capçada de porc rostida amb amanida d'enciam i remolatxa",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6-7T-8T-10T-11T | Kcal: 709, Lip: 25.31, Prot: 39.92, HC: 79.90"
+  },
+  {
+    fecha: "2026-11-06",
+    primerPlato: "Sopa de brou amb arròs",
+    segundoPlato: "Lluç amorosit amb salsa de tomàquet, albergínia, pastanaga, ceba i patata dau",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 4-9T, 1-3T-6-7T-8T-10T-11T | Kcal: 522, Lip: 19.89, Prot: 23.91, HC: 62.63"
+  },
+  {
+    fecha: "2026-11-09",
+    primerPlato: "Llenties estofades amb verdures (tomàquet, pastanaga, ceba)",
+    segundoPlato: "Truita de patates casolana amb amanida d'enciam i olives",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1T, 3, 1-3T-6-7T-8T-10T-11T | Kcal: 765, Lip: 31.98, Prot: 31.55, HC: 90.23"
+  },
+  {
+    fecha: "2026-11-10",
+    primerPlato: "Risotto de carabassa i tomàquet",
+    segundoPlato: "Estofat de carn magra a la jardinera amb patata dau",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6-7T-8T-10T-11T | Kcal: 783, Lip: 21.63, Prot: 31.35, HC: 115.89"
+  },
+  {
+    fecha: "2026-11-11",
+    primerPlato: "Crema de carabassó, patata i ceba",
+    segundoPlato: "Cigrons amb cuscús i verdures amb amanida d'enciam i blat de moro",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1-6T-10T, 1-3T-6-7T-8T-10T-11T | Kcal: 763, Lip: 21.41, Prot: 26.52, HC: 116.54"
+  },
+  {
+    fecha: "2026-11-12",
+    primerPlato: "Espirals integrals amb salsa d'espinacs (espinacs, ceba, nata)",
+    segundoPlato: "Seitó a l'andalusa casolà amb amanida d'enciam i pastanaga",
+    postre: "Iogurt i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6T-7-10T, 1-2T-4-6T-10T-14T, 1-3T-6-7-8T-10T-11T | Kcal: 965, Lip: 32.83, Prot: 46.68, HC: 118.04"
+  },
+  {
+    fecha: "2026-11-13",
+    primerPlato: "Patates estofades amb verdures (pebrot, ceba, pèsols)",
+    segundoPlato: "Contracuixa de pollastre amb cítrics i arròs saltat",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6-7T-8T-10T-11T | Kcal: 778, Lip: 17.62, Prot: 38.88, HC: 100.01"
+  },
+  {
+    fecha: "2026-11-16",
+    primerPlato: "Crema de carabassa",
+    segundoPlato: "Macarrons integrals amb bolonyesa de llenties",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6T-10T, 1-3T-6-7T-8T-10T-11T | Kcal: 697, Lip: 15.78, Prot: 22.76, HC: 114.31"
+  },
+  {
+    fecha: "2026-11-17",
+    primerPlato: "Sopa d'au amb pasta fina",
+    segundoPlato: "Lluç al forn amb salsa de mel i mostassa amb llit de patata panadera i amanida d'enciam i pastanaga",
+    postre: "Iogurt i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6T-10T, 2T-4-10-12-14T, 1-3T-6-7-8T-10T-11T | Kcal: 686, Lip: 26.84, Prot: 31.26, HC: 77.98"
+  },
+  {
+    fecha: "2026-11-18",
+    primerPlato: "Arròs napolitana",
+    segundoPlato: "Truita de tonyina casolana amb amanida d'enciam i olives",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 3-4, 1-3T-6-7T-8T-10T-11T | Kcal: 807, Lip: 35.30, Prot: 25.69, HC: 95.29"
+  },
+  {
+    fecha: "2026-11-19",
+    primerPlato: "Mongetes blanques estofades amb verdures (tomàquet, pastanaga, ceba)",
+    segundoPlato: "Botifarra al forn amb amanida d'enciam i tomàquet",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 12, 7T-12, 1-3T-6-7T-8T-10T-11T | Kcal: 694, Lip: 33.12, Prot: 30.25, HC: 65.73"
+  },
+  {
+    fecha: "2026-11-20",
+    primerPlato: "Coliflor cruixent i patata al forn",
+    segundoPlato: "Estofat de gall dindi a la jardinera i arròs saltat",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1-6T-7-10T, 1-3T-6-7T-8T-10T-11T | Kcal: 810, Lip: 19.60, Prot: 42.75, HC: 116.79"
+  },
+  {
+    fecha: "2026-11-23",
+    primerPlato: "Arròs integral amb salsa de carabassa, ceba, porro i tomàquet",
+    segundoPlato: "Truita de pernil dolç casolana amb amanida d'enciam i sèsam",
+    postre: "Iogurt i Pa Integral",
+    observaciones: "Alérgenos: 3, 11, 1-3T-6-7-8T-10T-11T | Kcal: 764, Lip: 33.78, Prot: 29.35, HC: 80.98"
+  },
+  {
+    fecha: "2026-11-24",
+    primerPlato: "Vichyssoise (porro, ceba, patata)",
+    segundoPlato: "Cigrons saltats amb verdures (ceba, pastanaga, tomàquet) i amanida d'enciam i olives",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 7, 1-3T-6-7T-8T-10T-11T | Kcal: 769, Lip: 28.05, Prot: 24.73, HC: 105.05"
+  },
+  {
+    fecha: "2026-11-25",
+    primerPlato: "Sopa de brou amb pistons",
+    segundoPlato: "Pollastre al forn amb poma i arròs saltat",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6T-10T, 1-3T-6-7T-8T-10T-11T | Kcal: 705, Lip: 17.81, Prot: 40.08, HC: 95.30"
+  },
+  {
+    fecha: "2026-11-26",
+    primerPlato: "Mongeta verda amb patata",
+    segundoPlato: "Fideus a la cassola amb magra",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6T-10T, 1-3T-6-7T-8T-10T-11T | Kcal: 792, Lip: 14.89, Prot: 27.41, HC: 136.44"
+  },
+  {
+    fecha: "2026-11-27",
+    primerPlato: "Llenties estofades amb verdures (tomàquet, pastanaga, ceba)",
+    segundoPlato: "Rap a l'andalusa casolà amb amanida d'enciam i remolatxa",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1T, 1-4-6T-10T, 1-3T-6-7T-8T-10T-11T | Kcal: 752, Lip: 24.67, Prot: 38.40, HC: 96.18"
+  },
+  {
+    fecha: "2026-11-30",
+    primerPlato: "Crema de carabassó, patata i ceba",
+    segundoPlato: "Macarrons integrals a la bolonyesa i formatge ratllat",
+    postre: "Fruita variada i Pa Integral",
+    observaciones: "Alérgenos: 1-3T-6T-7-10T-12, 1-3T-6-7T-8T-10T-11T | Kcal: 723, Lip: 21.44, Prot: 28.87, HC: 103.39"
+  }
+];
+
+export const MENU_ESCOLAR_2026: MenuDiaEscolar[] = [
+  ...MENU_OCTUBRE_2026,
+  ...MENU_NOVIEMBRE_2026
+];
+
 /**
- * Inserta todos los menús de octubre 2026 en Firestore.
+ * Inserta todos los menús de octubre y noviembre 2026 en Firestore.
  * Escribe tanto en 'menu_escolar' como en 'menu_escolar_alma' para máxima compatibilidad.
  */
 export async function sincronizarMenuOctubreFirestore(
@@ -180,7 +335,7 @@ export async function sincronizarMenuOctubreFirestore(
     const timestamp = new Date().toISOString();
     let contador = 0;
 
-    for (const menu of MENU_OCTUBRE_2026) {
+    for (const menu of MENU_ESCOLAR_2026) {
       const docData: MenuDiaEscolar = {
         ...menu,
         actualizadoPor: usuarioEmail,
@@ -197,12 +352,12 @@ export async function sincronizarMenuOctubreFirestore(
     }
 
     if (typeof window !== 'undefined') {
-      localStorage.setItem('menu_octubre_2026_sincronizado', 'true');
+      localStorage.setItem('menu_noviembre_2026_sincronizado', 'true');
     }
 
     return { total: contador, exito: true };
   } catch (error) {
-    console.error("Error al sincronizar menú de octubre en Firestore:", error);
+    console.error("Error al sincronizar menú escolar en Firestore:", error);
     return { total: 0, exito: false };
   }
 }

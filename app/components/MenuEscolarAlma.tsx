@@ -9,7 +9,7 @@ import {
   onSnapshot 
 } from 'firebase/firestore';
 import { 
-  MENU_OCTUBRE_2026, 
+  MENU_ESCOLAR_2026, 
   sincronizarMenuOctubreFirestore 
 } from '../data/menuOctubre2026';
 
@@ -23,7 +23,7 @@ export interface MenuDia {
   actualizadoEl?: string;
 }
 
-const MAPA_MENU_OCTUBRE = MENU_OCTUBRE_2026.reduce((acc, item) => {
+const MAPA_MENU_OCTUBRE = MENU_ESCOLAR_2026.reduce((acc, item) => {
   acc[item.fecha] = item;
   return acc;
 }, {} as Record<string, MenuDia>);
@@ -45,6 +45,11 @@ const DIAS_SEMANA_LABORALES = [
 const MESES = [
   'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
   'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
+];
+
+const MESES_COMPLETOS = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
 // Helper para convertir una fecha a formato YYYY-MM-DD local
@@ -95,15 +100,15 @@ export default function MenuEscolarAlma({
     }, 3200);
   };
 
-  // Sincronización automática de octubre 2026 en Firestore al iniciar sesión
+  // Sincronización automática de octubre y noviembre 2026 en Firestore al iniciar sesión
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const yaSincronizado = localStorage.getItem('menu_octubre_2026_sincronizado_v1_3_0');
+    const yaSincronizado = localStorage.getItem('menu_noviembre_2026_sincronizado_v1_4_0');
     if (!yaSincronizado && usuario?.email) {
       sincronizarMenuOctubreFirestore(db, usuario.email).then((res) => {
         if (res.exito) {
-          localStorage.setItem('menu_octubre_2026_sincronizado_v1_3_0', 'true');
-          mostrarNotificacion(`✓ ${res.total} menús de octubre sincronizados en Firestore`);
+          localStorage.setItem('menu_noviembre_2026_sincronizado_v1_4_0', 'true');
+          mostrarNotificacion(`✓ Menús escolares de noviembre sincronizados en Firestore`);
         }
       });
     }
@@ -313,7 +318,7 @@ export default function MenuEscolarAlma({
               Menú Escolar de Alma
             </h2>
             <p style={{ margin: '2px 0 0 0', fontSize: '12px', opacity: 0.85 }}>
-              Institut Escola Castellterçol • Octubre 2026
+              Institut Escola Castellterçol • {MESES_COMPLETOS[fechaReferencia.getMonth()]} {fechaReferencia.getFullYear()}
             </p>
           </div>
         </div>
