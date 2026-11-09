@@ -12,7 +12,7 @@ if (
 const axios = require('axios');
 const http = require('http');
 
-const API_KEY = process.env.FOOTBALL_DATA_KEY;
+const API_KEY = process.env.FOOTBALL_DATA_KEY || 'd3d260c4e5784987a9dcc95c5558bbc9';
 const BASE_URL = 'https://api.football-data.org/v4';
 const PORT = process.env.PORT || 3001;
 
@@ -21,10 +21,9 @@ const LIMITE_TOP_PARTIDOS = 5;
 const CUOTA_MIN = Number(process.env.CUOTA_MIN) || 1.25;
 const CUOTA_MAX = Number(process.env.CUOTA_MAX) || 1.45;
 
-// Las 5 grandes ligas europeas + Segunda División española (LaLiga Hypermotion)
+// Las 5 grandes ligas europeas incluidas en el plan gratuito (5 ligas x 2 llamadas = 10 llamadas/min)
 const LEAGUES = [
   { code: 'PD', name: 'LaLiga (Primera División)' },
-  { code: 'SD', name: 'Segunda División (LaLiga Hypermotion)' },
   { code: 'PL', name: 'Premier League' },
   { code: 'BL1', name: 'Bundesliga' },
   { code: 'SA', name: 'Serie A' },
@@ -611,8 +610,14 @@ async function obtenerPropuestasPartidos() {
       });
     }
 
-    // Pausa anti-bloqueo (Rate Limiting) de 1.2 segundos entre cada liga
-    await new Promise((r) => setTimeout(r, 1200));
+    // Pausa ligera anti-bloqueo (300ms) para no superar el timeout de 10s en Vercel
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  const ligasDisponibles = resumenLigas.filter((l) => l.disponibleEnPlanActual);
+  if (ligasDisponibles.length === 0 && resumenLigas.length > 0) {
+    const primerAviso = resumenLigas[0]?.aviso || 'No se pudo conectar con football-data.org';
+    throw new Error(primerAviso);
   }
 
   // 3. Ordenación por puntuación estratégica (Visitante X2 + Rival Zona Media 8-12 + Valor de Cuota)
