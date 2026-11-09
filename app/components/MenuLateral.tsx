@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { formatearNombreFamiliar } from '../utils/actividad';
 import { APP_VERSION } from '../data/version';
 
-export type SeccionPrincipal = 'planificador' | 'finanzas' | 'bloc-notas' | 'lista-compra' | 'horas-trabajadas' | 'quinielas' | 'quinielas-estadisticas' | 'quinielas-historial' | 'configuracion';
+export type SeccionPrincipal = 'planificador' | 'finanzas' | 'bloc-notas' | 'lista-compra' | 'horas-trabajadas' | 'quinielas' | 'quinielas-estadisticas' | 'quinielas-historial' | 'quinielas-ia' | 'configuracion';
 
 interface MenuLateralProps {
   abierto: boolean;
@@ -647,7 +647,7 @@ export default function MenuLateral({
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', width: '100%', border: 0, background: 'transparent', color: quinielasAbierto || seccionActiva.startsWith('quinielas') ? '#92400e' : '#334155', cursor: 'pointer', textAlign: 'left' }}
             >
               <span style={{ width: 38, height: 38, borderRadius: 10, background: quinielasAbierto || seccionActiva.startsWith('quinielas') ? '#fef3c7' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🎟️</span>
-              <span style={{ flex: 1 }}><span style={{ display: 'block', fontSize: 14, fontWeight: 800 }}>Quinielas</span><span style={{ display: 'block', marginTop: 2, color: '#64748b', fontSize: 11 }}>Boletos, estadísticas e historial</span></span>
+              <span style={{ flex: 1 }}><span style={{ display: 'block', fontSize: 14, fontWeight: 800 }}>Quinielas</span><span style={{ display: 'block', marginTop: 2, color: '#64748b', fontSize: 11 }}>Boletos, estadísticas, historial e IA</span></span>
               <span aria-hidden="true" style={{ fontSize: 14 }}>{quinielasAbierto ? '⌄' : '›'}</span>
             </button>
             {quinielasAbierto && (
@@ -656,6 +656,7 @@ export default function MenuLateral({
                   ['quinielas', 'Mis boletos'],
                   ['quinielas-estadisticas', 'Estadísticas'],
                   ['quinielas-historial', 'Historial'],
+                  ['quinielas-ia', 'Inteligencia IA'],
                 ] as const).map(([seccion, titulo]) => (
                   <button key={seccion} onClick={() => { onCambiarSeccion(seccion); onCerrar(); }} aria-current={seccionActiva === seccion ? 'page' : undefined} style={{ border: 0, borderRadius: 8, padding: '9px 10px', background: seccionActiva === seccion ? '#fef3c7' : 'transparent', color: seccionActiva === seccion ? '#92400e' : '#475569', textAlign: 'left', fontWeight: seccionActiva === seccion ? 800 : 600, fontSize: 13, cursor: 'pointer' }}>
                     {titulo}

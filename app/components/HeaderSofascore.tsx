@@ -448,12 +448,12 @@ export default function HeaderSofascore({
             )}
           </div>
         </div>
-      ) : seccionActiva === 'quinielas' || seccionActiva === 'quinielas-estadisticas' || seccionActiva === 'quinielas-historial' ? (
+      ) : seccionActiva === 'quinielas' || seccionActiva === 'quinielas-estadisticas' || seccionActiva === 'quinielas-historial' || seccionActiva === 'quinielas-ia' ? (
         <div style={{ backgroundColor: '#fffbeb', borderBottom: '1px solid #fde68a', display: 'flex', justifyContent: 'center', width: '100%', padding: '10px 12px' }}>
           <div style={{ width: '100%', maxWidth: '500px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <span style={{ fontSize: 18 }}>🎟️</span>
-              <div><span style={{ display: 'block', fontSize: 14, fontWeight: 800, color: '#92400e', lineHeight: 1.15 }}>Quinielas</span><span style={{ display: 'block', fontSize: 11, color: '#64748b', lineHeight: 1.15 }}>{seccionActiva === 'quinielas-estadisticas' ? 'Estadísticas' : seccionActiva === 'quinielas-historial' ? 'Historial' : 'Mis boletos'}</span></div>
+              <div><span style={{ display: 'block', fontSize: 14, fontWeight: 800, color: '#92400e', lineHeight: 1.15 }}>Quinielas</span><span style={{ display: 'block', fontSize: 11, color: '#64748b', lineHeight: 1.15 }}>{seccionActiva === 'quinielas-estadisticas' ? 'Estadísticas' : seccionActiva === 'quinielas-historial' ? 'Historial' : seccionActiva === 'quinielas-ia' ? 'Inteligencia IA' : 'Mis boletos'}</span></div>
             </div>
             {seccionActiva === 'quinielas-estadisticas' && (
               <button

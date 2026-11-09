@@ -31,8 +31,73 @@ interface BoletoQuiniela {
 }
 
 interface QuinielasProps {
-  vista: 'boletos' | 'estadisticas' | 'historial';
+  vista: 'boletos' | 'estadisticas' | 'historial' | 'ia';
   usuario: { email?: string | null; displayName?: string | null } | null;
+}
+
+interface EquipoIA {
+  id: number;
+  nombre: string;
+  escudo?: string | null;
+  esTop5?: boolean;
+  posicionTabla?: number | null;
+  puntos?: number | null;
+  xG?: number | null;
+}
+
+interface PartidoIA {
+  rankingValor: number;
+  matchId: number;
+  liga: {
+    codigo: string;
+    nombre: string;
+    jornada?: number | null;
+  };
+  fechaUTC?: string;
+  estado?: string;
+  partido: string;
+  cuotaEstimada: number;
+  analisisValor?: {
+    scoreValor?: number;
+    esFavoritoVisitante?: boolean;
+    posicionRival?: number;
+    clasificacionZonaRival?: string;
+    diferenciaPuntos?: number;
+    diferenciaPosiciones?: number;
+    diferenciaXG?: number;
+  };
+  equipos: {
+    local: EquipoIA;
+    visitante: EquipoIA;
+  };
+  metricasXG?: {
+    disponible?: boolean;
+    xGLocal?: number | null;
+    xGVisitante?: number | null;
+    xGTotalPartido?: number | null;
+    metodo?: string;
+    aviso?: string;
+  };
+  propuestaApuesta?: {
+    mercado?: string;
+    seleccion?: '1X' | 'X2' | string;
+    condicionFavorito?: 'LOCAL' | 'VISITANTE' | string;
+    favorito?: string;
+    cuotaEstimada?: number;
+    probabilidadEstimadaPct?: number;
+    diferenciaPuntos?: number;
+    diferenciaPosiciones?: number;
+    motivo?: string;
+  } | null;
+}
+
+interface RespuestaIA {
+  proveedor?: string;
+  generadoEn?: string;
+  temporada?: number;
+  partidos?: PartidoIA[];
+  error?: string;
+  detalle?: string;
 }
 
 const COLECCION = 'quinielas';
@@ -205,6 +270,43 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const [rachaMaximaGuardada, setRachaMaximaGuardada] = useState(0);
   const [paginaEstadisticas, setPaginaEstadisticas] = useState(0);
   const [mensaje, setMensaje] = useState('');
+
+  // Estados para Inteligencia IA
+  const [partidosIA, setPartidosIA] = useState<PartidoIA[]>([]);
+  const [indiceIA, setIndiceIA] = useState(0);
+  const [ejecutandoIA, setEjecutandoIA] = useState(false);
+  const [errorIA, setErrorIA] = useState('');
+  const [generadoEnIA, setGeneradoEnIA] = useState('');
+
+  const ejecutarScriptIA = async () => {
+    setEjecutandoIA(true);
+    setErrorIA('');
+    try {
+      let respuesta: Response;
+      try {
+        respuesta = await fetch('/api/apuestas', { cache: 'no-store' });
+      } catch {
+        // Fallback opcional por si se ejecuta servidorApuestas.js --serve en el puerto 3001
+        respuesta = await fetch('http://localhost:3001/api/apuestas', { cache: 'no-store' });
+      }
+      const datos: RespuestaIA = await respuesta.json();
+      if (!respuesta.ok || datos.error) {
+        throw new Error(datos.detalle || datos.error || 'No se pudo ejecutar el script de Inteligencia IA.');
+      }
+      const lista = Array.isArray(datos.partidos) ? datos.partidos.slice(0, 5) : [];
+      setPartidosIA(lista);
+      setIndiceIA(0);
+      setGeneradoEnIA(datos.generadoEn || new Date().toISOString());
+      if (lista.length === 0) {
+        setErrorIA('El script se ejecutó correctamente, pero no se encontraron partidos dentro del rango de cuota objetivo en los próximos 14 días.');
+      }
+    } catch (err: unknown) {
+      const detalle = err instanceof Error ? err.message : 'Error de conexión con el servidor.';
+      setErrorIA(`No se pudo obtener el análisis IA: ${detalle}`);
+    } finally {
+      setEjecutandoIA(false);
+    }
+  };
 
   useEffect(() => onSnapshot(collection(db, COLECCION), (snapshot) => {
     const filas = snapshot.docs.map((registro) => {
@@ -605,14 +707,759 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const boletosVisiblesHistorial = boletosArchivados.filter((boleto) => !boleto.ocultoHistorial);
   const listaHistorial = mostrarOcultosHistorial ? boletosOcultosHistorial : boletosVisiblesHistorial;
 
+  const totalPartidosIA = partidosIA.length;
+  const indiceIAActual = totalPartidosIA > 0 ? Math.min(indiceIA, totalPartidosIA - 1) : 0;
+  const matchActual: PartidoIA | null = totalPartidosIA > 0 ? partidosIA[indiceIAActual] : null;
+
+  const irAnteriorIA = () => {
+    if (totalPartidosIA <= 1) return;
+    setIndiceIA((actual) => (actual <= 0 ? totalPartidosIA - 1 : actual - 1));
+  };
+
+  const irSiguienteIA = () => {
+    if (totalPartidosIA <= 1) return;
+    setIndiceIA((actual) => (actual >= totalPartidosIA - 1 ? 0 : actual + 1));
+  };
+
+  const manejarErrorEscudo = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    const img = e.currentTarget;
+    img.onerror = null;
+    img.src = '/placeholder.png';
+  };
+
   return (
     <section style={{ width: '100%', maxWidth: 760, margin: '24px auto 0', paddingBottom: 30 }}>
       <div style={{ marginBottom: 18 }}>
-        <div style={{ color: '#0047b3', fontSize: 24, fontWeight: 850 }}>🎟️ {vista === 'boletos' ? 'Quinielas' : vista === 'estadisticas' ? 'Estadísticas de quinielas' : 'Historial de quinielas'}</div>
-        <div style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>{vista === 'boletos' ? 'Guarda tus combinaciones y sigue los resultados.' : vista === 'estadisticas' ? 'Resumen de partidos, apuestas y balance acumulado.' : 'Oculta los boletos de prueba; seguirán guardados y contando en estadísticas.'}</div>
+        <div style={{ color: '#0047b3', fontSize: 24, fontWeight: 850 }}>
+          {vista === 'ia' ? '🤖 Inteligencia IA' : `🎟️ ${vista === 'boletos' ? 'Quinielas' : vista === 'estadisticas' ? 'Estadísticas de quinielas' : 'Historial de quinielas'}`}
+        </div>
+        <div style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>
+          {vista === 'boletos'
+            ? 'Guarda tus combinaciones y sigue los resultados.'
+            : vista === 'estadisticas'
+            ? 'Resumen de partidos, apuestas y balance acumulado.'
+            : vista === 'ia'
+            ? 'Motor predictivo Top 5 de valor (Doble Oportunidad 1X / X2, xG y brecha competitiva).'
+            : 'Oculta los boletos de prueba; seguirán guardados y contando en estadísticas.'}
+        </div>
       </div>
 
-      {vista === 'historial' ? (
+      {vista === 'ia' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* BARRA DE ACCIÓN SUPERIOR: EJECUTAR SCRIPT Y ESTADO */}
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
+              borderRadius: 18,
+              padding: '18px 20px',
+              color: '#ffffff',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 14,
+              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.14)',
+            }}
+          >
+            <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  style={{
+                    background: 'rgba(56, 189, 248, 0.2)',
+                    border: '1px solid rgba(56, 189, 248, 0.45)',
+                    color: '#7dd3fc',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    padding: '3px 9px',
+                    borderRadius: 999,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  Top 5 Ranking IA
+                </span>
+                {generadoEnIA && (
+                  <span style={{ fontSize: 11, color: '#cbd5e1' }}>
+                    Actualizado {new Date(generadoEnIA).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, marginTop: 6 }}>
+                 Escáner de Valor en Ligas Europeas
+              </div>
+              <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 2 }}>
+                Ejecuta el script para analizar clasificaciones, xG y cuotas estimadas y pintar los 5 mejores pronósticos.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={ejecutarScriptIA}
+              disabled={ejecutandoIA}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '12px 18px',
+                borderRadius: 12,
+                border: '1px solid #38bdf8',
+                background: ejecutandoIA
+                  ? 'rgba(56, 189, 248, 0.25)'
+                  : 'linear-gradient(90deg, #0284c7 0%, #2563eb 100%)',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: ejecutandoIA ? 'wait' : 'pointer',
+                boxShadow: ejecutandoIA ? 'none' : '0 4px 14px rgba(2, 132, 199, 0.4)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>{ejecutandoIA ? '⏳ Analizando ligas…' : '⚡ Ejecutar Script IA'}</span>
+            </button>
+          </div>
+
+          {errorIA && (
+            <div
+              role="alert"
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#b91c1c',
+                borderRadius: 14,
+                padding: '12px 16px',
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              {errorIA}
+            </div>
+          )}
+
+          {/* CONTENEDOR PRINCIPAL DE LAS CASILLAS (DISEÑO BOCETO + FRENTE A FRENTE + CARRUSEL) */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: '2px solid #cbd5e1',
+              borderRadius: 20,
+              padding: '20px 18px',
+              boxShadow: '0 6px 20px rgba(15, 23, 42, 0.06)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
+            }}
+          >
+            {/* BARRA SUPERIOR DEL PARTIDO: RANKING 1..5 Y NAVEGADOR POR FLECHAS LATERALES */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                flexWrap: 'wrap',
+                borderBottom: '1px solid #e2e8f0',
+                paddingBottom: 12,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span
+                  style={{
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    color: '#0047b3',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    padding: '5px 11px',
+                    borderRadius: 10,
+                  }}
+                >
+                  {matchActual
+                    ? `🏆 Ranking #${matchActual.rankingValor || indiceIAActual + 1} de ${totalPartidosIA}`
+                    : '🏆 Ranking — de 5'}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>
+                  {matchActual
+                    ? `${matchActual.liga?.nombre || 'Liga'}${matchActual.liga?.jornada ? ` · Jornada ${matchActual.liga.jornada}` : ''}`
+                    : 'Pulsa «Ejecutar Script IA» para cargar los 5 partidos'}
+                </span>
+              </div>
+
+              {/* PÍLDORAS RÁPIDAS DE RANKING 1 A 5 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                {[0, 1, 2, 3, 4].map((idx) => {
+                  const disponible = idx < totalPartidosIA;
+                  const activo = disponible && idx === indiceIAActual;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={!disponible}
+                      onClick={() => setIndiceIA(idx)}
+                      aria-label={`Ir al partido Ranking ${idx + 1}`}
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 8,
+                        border: activo ? '2px solid #0047b3' : '1px solid #cbd5e1',
+                        background: activo ? '#0047b3' : disponible ? '#f8fafc' : '#f1f5f9',
+                        color: activo ? '#ffffff' : disponible ? '#1e293b' : '#94a3b8',
+                        fontWeight: 800,
+                        fontSize: 12,
+                        cursor: disponible ? 'pointer' : 'default',
+                      }}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. CABECERA DEL PARTIDO FRENTE A FRENTE */}
+            <div
+              style={{
+                background: 'linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%)',
+                border: '1px solid #dbeafe',
+                borderRadius: 16,
+                padding: '16px 14px',
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)',
+                alignItems: 'center',
+                gap: 12,
+                textAlign: 'center',
+              }}
+            >
+              {/* EQUIPO LOCAL FRENTE A FRENTE */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <div
+                  style={{
+                    width: 60,
+                    height: 60,
+                    borderRadius: 14,
+                    background: '#ffffff',
+                    border: '2px solid #cbd5e1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 6,
+                    boxShadow: '0 2px 6px rgba(15, 23, 42, 0.06)',
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={matchActual?.equipos?.local?.escudo || '/placeholder.png'}
+                    alt={matchActual?.equipos?.local?.nombre ? `Escudo ${matchActual.equipos.local.nombre}` : 'Escudo equipo local'}
+                    onError={manejarErrorEscudo}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                  {matchActual?.equipos?.local?.nombre || 'Equipo Local'}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#0047b3', background: '#dbeafe', padding: '2px 7px', borderRadius: 6 }}>
+                    {matchActual?.equipos?.local?.posicionTabla ? `#${matchActual.equipos.local.posicionTabla}º Tabla` : '#— Tabla'}
+                  </span>
+                  {matchActual?.equipos?.local?.puntos != null && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                      {matchActual.equipos.local.puntos} pts
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* MARCADOR CENTRAL VS + FECHA */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                <span
+                  style={{
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    fontWeight: 900,
+                    fontSize: 12,
+                    padding: '6px 10px',
+                    borderRadius: 999,
+                    letterSpacing: '0.8px',
+                  }}
+                >
+                  VS
+                </span>
+                {matchActual?.fechaUTC && (
+                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {new Date(matchActual.fechaUTC).toLocaleDateString('es-ES', {
+                      day: '2-digit',
+                      month: '2-digit',
+                    })}{' '}
+                    ·{' '}
+                    {new Date(matchActual.fechaUTC).toLocaleTimeString('es-ES', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                )}
+              </div>
+
+              {/* EQUIPO VISITANTE FRENTE A FRENTE */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <div
+                  style={{
+                    width: 60,
+                    height: 60,
+                    borderRadius: 14,
+                    background: '#ffffff',
+                    border: '2px solid #cbd5e1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 6,
+                    boxShadow: '0 2px 6px rgba(15, 23, 42, 0.06)',
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={matchActual?.equipos?.visitante?.escudo || '/placeholder.png'}
+                    alt={matchActual?.equipos?.visitante?.nombre ? `Escudo ${matchActual.equipos.visitante.nombre}` : 'Escudo equipo visitante'}
+                    onError={manejarErrorEscudo}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', lineHeight: 1.2, overflowWrap: 'anywhere' }}>
+                  {matchActual?.equipos?.visitante?.nombre || 'Equipo Visitante'}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#0047b3', background: '#dbeafe', padding: '2px 7px', borderRadius: 6 }}>
+                    {matchActual?.equipos?.visitante?.posicionTabla ? `#${matchActual.equipos.visitante.posicionTabla}º Tabla` : '#— Tabla'}
+                  </span>
+                  {matchActual?.equipos?.visitante?.puntos != null && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                      {matchActual.equipos.visitante.puntos} pts
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* BLOQUE DE FILAS ESCUDO + EQUIPO (FIEL AL BOCETO ADJUNTO) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '64px minmax(0, 1fr)',
+                  gap: 12,
+                  padding: '0 4px',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: '#475569',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                <span style={{ textAlign: 'center' }}>Escudo</span>
+                <span>Equipo y posición</span>
+              </div>
+
+              {/* FILA 1: LOCAL */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '64px minmax(0, 1fr)',
+                  gap: 12,
+                  alignItems: ' stretch',
+                }}
+              >
+                <div
+                  style={{
+                    width: 64,
+                    height: 64,
+                    border: '2px solid #0f172a',
+                    borderRadius: 12,
+                    background: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 8,
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={matchActual?.equipos?.local?.escudo || '/placeholder.png'}
+                    alt={matchActual?.equipos?.local?.nombre || 'Escudo Local'}
+                    onError={manejarErrorEscudo}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                </div>
+                <div
+                  style={{
+                    border: '2px solid #0f172a',
+                    borderRadius: 12,
+                    padding: '10px 14px',
+                    background: matchActual?.equipos?.local?.esTop5 ? '#f0fdf4' : '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 850, color: '#0f172a', overflowWrap: 'anywhere' }}>
+                      {matchActual?.equipos?.local?.nombre || '—'}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#475569', marginTop: 2, fontWeight: 600 }}>
+                      Local · Posición:{' '}
+                      <strong>
+                        {matchActual?.equipos?.local?.posicionTabla ? `#${matchActual.equipos.local.posicionTabla}º` : '—'}
+                      </strong>
+                      {matchActual?.equipos?.local?.puntos != null ? ` (${matchActual.equipos.local.puntos} pts)` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {matchActual?.equipos?.local?.esTop5 && (
+                      <span style={{ background: '#dcfce7', color: '#15803d', fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 8 }}>
+                        ⭐ Top 5
+                      </span>
+                    )}
+                    <span style={{ background: '#f1f5f9', color: '#334155', fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 8 }}>
+                      xG: {matchActual?.equipos?.local?.xG ?? matchActual?.metricasXG?.xGLocal ?? '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* FILA 2: VISITANTE */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '64px minmax(0, 1fr)',
+                  gap: 12,
+                  alignItems: 'stretch',
+                }}
+              >
+                <div
+                  style={{
+                    width: 64,
+                    height: 64,
+                    border: '2px solid #0f172a',
+                    borderRadius: 12,
+                    background: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 8,
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={matchActual?.equipos?.visitante?.escudo || '/placeholder.png'}
+                    alt={matchActual?.equipos?.visitante?.nombre || 'Escudo Visitante'}
+                    onError={manejarErrorEscudo}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                </div>
+                <div
+                  style={{
+                    border: '2px solid #0f172a',
+                    borderRadius: 12,
+                    padding: '10px 14px',
+                    background: matchActual?.equipos?.visitante?.esTop5 ? '#f0fdf4' : '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 850, color: '#0f172a', overflowWrap: 'anywhere' }}>
+                      {matchActual?.equipos?.visitante?.nombre || '—'}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#475569', marginTop: 2, fontWeight: 600 }}>
+                      Visitante · Posición:{' '}
+                      <strong>
+                        {matchActual?.equipos?.visitante?.posicionTabla ? `#${matchActual.equipos.visitante.posicionTabla}º` : '—'}
+                      </strong>
+                      {matchActual?.equipos?.visitante?.puntos != null ? ` (${matchActual.equipos.visitante.puntos} pts)` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    {matchActual?.equipos?.visitante?.esTop5 && (
+                      <span style={{ background: '#dcfce7', color: '#15803d', fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 8 }}>
+                        ⭐ Top 5
+                      </span>
+                    )}
+                    <span style={{ background: '#f1f5f9', color: '#334155', fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 8 }}>
+                      xG: {matchActual?.equipos?.visitante?.xG ?? matchActual?.metricasXG?.xGVisitante ?? '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. REJILLA DE CASILLAS CON DATOS: CUOTA ESTIMADA, MERCADO PROPUESTO, PROBABILIDAD %, BRECHA DE PUNTOS Y MÉTRICAS DE XG */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))',
+                gap: 10,
+              }}
+            >
+              {/* CASILLA 1: MERCADO PROPUESTO (1X o X2) */}
+              <div
+                style={{
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: 14,
+                  padding: '12px 13px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#1e40af', textTransform: 'uppercase' }}>
+                  Mercado propuesto
+                </span>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#0047b3', marginTop: 6 }}>
+                  {matchActual?.propuestaApuesta?.seleccion || '—'}
+                </div>
+                <span style={{ fontSize: 11, color: '#475569', marginTop: 3 }}>
+                  {matchActual?.propuestaApuesta?.mercado || 'Doble Oportunidad'}
+                </span>
+              </div>
+
+              {/* CASILLA 2: CUOTA ESTIMADA */}
+              <div
+                style={{
+                  background: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: 14,
+                  padding: '12px 13px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#166534', textTransform: 'uppercase' }}>
+                  Cuota estimada
+                </span>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#15803d', marginTop: 6 }}>
+                  {matchActual?.cuotaEstimada ? matchActual.cuotaEstimada.toFixed(2) : '—'}
+                </div>
+                <span style={{ fontSize: 11, color: '#475569', marginTop: 3 }}>
+                  Rango objetivo: 1.25 – 1.45
+                </span>
+              </div>
+
+              {/* CASILLA 3: PROBABILIDAD % */}
+              <div
+                style={{
+                  background: '#f5f3ff',
+                  border: '1px solid #ddd6fe',
+                  borderRadius: 14,
+                  padding: '12px 13px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#5b21b6', textTransform: 'uppercase' }}>
+                  Probabilidad %
+                </span>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#6d28d9', marginTop: 6 }}>
+                  {matchActual?.propuestaApuesta?.probabilidadEstimadaPct != null
+                    ? `${matchActual.propuestaApuesta.probabilidadEstimadaPct}%`
+                    : '—'}
+                </div>
+                <span style={{ fontSize: 11, color: '#475569', marginTop: 3 }}>
+                  Favorito: {matchActual?.propuestaApuesta?.favorito || '—'}
+                </span>
+              </div>
+
+              {/* CASILLA 4: BRECHA DE PUNTOS */}
+              <div
+                style={{
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  borderRadius: 14,
+                  padding: '12px 13px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#92400e', textTransform: 'uppercase' }}>
+                  Brecha de puntos
+                </span>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#b45309', marginTop: 6 }}>
+                  {matchActual?.analisisValor?.diferenciaPuntos != null
+                    ? `+${matchActual.analisisValor.diferenciaPuntos} pts`
+                    : '—'}
+                </div>
+                <span style={{ fontSize: 11, color: '#475569', marginTop: 3 }}>
+                  {matchActual?.analisisValor?.clasificacionZonaRival || 'Diferencia en tabla'}
+                </span>
+              </div>
+
+              {/* CASILLA 5: MÉTRICAS DE XG */}
+              <div
+                style={{
+                  background: '#f0f9ff',
+                  border: '1px solid #bae6fd',
+                  borderRadius: 14,
+                  padding: '12px 13px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#0369a1', textTransform: 'uppercase' }}>
+                  Métricas de xG
+                </span>
+                <div style={{ fontSize: 17, fontWeight: 900, color: '#0284c7', marginTop: 6 }}>
+                  {matchActual?.metricasXG?.disponible
+                    ? `${matchActual.metricasXG.xGLocal} vs ${matchActual.metricasXG.xGVisitante}`
+                    : '—'}
+                </div>
+                <span style={{ fontSize: 11, color: '#475569', marginTop: 3 }}>
+                  Total xG: {matchActual?.metricasXG?.xGTotalPartido ?? '—'}
+                  {matchActual?.analisisValor?.diferenciaXG != null
+                    ? ` (Δ ${matchActual.analisisValor.diferenciaXG >= 0 ? '+' : ''}${matchActual.analisisValor.diferenciaXG})`
+                    : ''}
+                </span>
+              </div>
+            </div>
+
+            {/* 4. CASILLA PRINCIPAL / EXPLICACIÓN (MOTIVO) */}
+            <div
+              style={{
+                border: '2px solid #0f172a',
+                borderRadius: 14,
+                padding: '16px 18px',
+                background: '#f8fafc',
+                minHeight: 120,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: 10,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 850,
+                    color: '#0f172a',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.4px',
+                    marginBottom: 8,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                  }}
+                >
+                  <span>💡 Motivo del pronóstico (propuestaApuesta.motivo)</span>
+                  {matchActual?.analisisValor?.scoreValor != null && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 800,
+                        background: '#e0e7ff',
+                        color: '#3730a3',
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                      }}
+                    >
+                      Score IA: {matchActual.analisisValor.scoreValor}
+                    </span>
+                  )}
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 14,
+                    lineHeight: 1.55,
+                    color: matchActual?.propuestaApuesta?.motivo ? '#1e293b' : '#64748b',
+                    fontWeight: matchActual?.propuestaApuesta?.motivo ? 600 : 500,
+                  }}
+                >
+                  {matchActual?.propuestaApuesta?.motivo ||
+                    'Pulsa el botón «Ejecutar Script IA» de arriba para consultar las ligas en tiempo real y mostrar aquí el razonamiento detallado del pronóstico.'}
+                </p>
+              </div>
+            </div>
+
+            {/* 1. NAVEGADOR LATERAL POR FLECHAS (CARRUSEL / ITERADOR INFERIOR COMO EN EL BOCETO) */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                paddingTop: 4,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>
+                {totalPartidosIA > 0
+                  ? `Mostrando partido ${indiceIAActual + 1} de ${totalPartidosIA} (Ranking #${matchActual?.rankingValor || indiceIAActual + 1})`
+                  : 'Sin partidos cargados (0 de 5)'}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+                <button
+                  type="button"
+                  onClick={irAnteriorIA}
+                  disabled={totalPartidosIA <= 1}
+                  aria-label="Partido anterior del ranking"
+                  title="Partido anterior"
+                  style={{
+                    minWidth: 56,
+                    height: 44,
+                    borderRadius: 12,
+                    border: '2px solid #0f172a',
+                    background: totalPartidosIA <= 1 ? '#f1f5f9' : '#ffffff',
+                    color: totalPartidosIA <= 1 ? '#94a3b8' : '#0f172a',
+                    fontSize: 20,
+                    fontWeight: 900,
+                    cursor: totalPartidosIA <= 1 ? 'default' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: totalPartidosIA <= 1 ? 'none' : '0 2px 6px rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  onClick={irSiguienteIA}
+                  disabled={totalPartidosIA <= 1}
+                  aria-label="Siguiente partido del ranking"
+                  title="Siguiente partido"
+                  style={{
+                    minWidth: 56,
+                    height: 44,
+                    borderRadius: 12,
+                    border: '2px solid #0f172a',
+                    background: totalPartidosIA <= 1 ? '#f1f5f9' : '#0047b3',
+                    color: totalPartidosIA <= 1 ? '#94a3b8' : '#ffffff',
+                    fontSize: 20,
+                    fontWeight: 900,
+                    cursor: totalPartidosIA <= 1 ? 'default' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: totalPartidosIA <= 1 ? 'none' : '0 2px 8px rgba(0, 71, 179, 0.25)',
+                  }}
+                >
+                  →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : vista === 'historial' ? (
         cargando ? (
           <div style={{ textAlign: 'center', color: '#64748b', padding: 24 }}>Cargando historial…</div>
         ) : (
