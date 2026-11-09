@@ -181,29 +181,62 @@ function numeroOCR(valor: string | undefined): number | null {
 }
 
 function extraerDatosApuesta(texto: string): { importe: number | null; cuota: number | null; ganancia: number | null } {
+  // Normalizamos artefactos frecuentes de Tesseract en importes con el símbolo €:
+  // En la tipografía en negrita (ej. bet365), "9€" suele leerse como "%€" ("4,29€" -> "4,2%€").
+  const textoNormalizado = texto
+    .replace(/(\d+[.,]\d)\s*%\s*€/g, '$19 €')
+    .replace(/(\d+[.,]\d{1,2})\s*€/g, '$1 €');
+
   // En el boleto pendiente suele aparecer "Apostar 1,00 €". En el recibo
-  // confirmado aparece "Cantidad" y el total se repite en el resumen final.
-  const importesApostados = [...texto.matchAll(/\b(?:apostar|apostado)\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
-  const importesCantidad = [...texto.matchAll(/\b(?:cantidad|importe)\s*(?:apostada)?\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€?/gi)];
-  const ganancias = [...texto.matchAll(/ganancias?\s+pot(?:encial(?:es)?)?\.?\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
-  const cuotas = [...texto.matchAll(/(?:cuota\s+combinada|combinada)\s*[:\-]?\s*(\d+(?:[.,]\d+)*)/gi)];
-  // En la pantalla de confirmación, OCR a veces lee primero ambas etiquetas
-  // en columnas y luego sus importes juntos: "Cantidad Ganancias pot." / "2,00€ 5,76€".
-  const lineas = texto.split(/\r?\n/);
+  // confirmado aparece "Cantidad" o "Apuesta total" y el total se repite en el resumen final.
+  const importesApostados = [...textoNormalizado.matchAll(/\b(?:apostar|apostado|apuesta\s+total|total\s+apostado)\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
+  const importesCantidad = [...textoNormalizado.matchAll(/\b(?:cantidad|importe|apuesta\s+total|total\s+apostado)\s*(?:apostad[ao]|total)?\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€?/gi)];
+  const ganancias = [...textoNormalizado.matchAll(/(?:ganancias?\s+pot(?:encial(?:es)?)?\.?|retorno\s+pot(?:encial)?\.?|ganancia\s+posible)\s*[:\-]?\s*(\d+(?:[.,]\d{1,2})?)\s*€/gi)];
+  const cuotas = [...textoNormalizado.matchAll(/(?:cuota\s+combinada|combinada|cuota\s+total)\s*[:\-]?\s*(\d+(?:[.,]\d+)*)/gi)];
+
+  // En la pantalla de confirmación, OCR suele leer primero ambas etiquetas
+  // en columnas y luego sus importes juntos:
+  // "Cantidad Ganancias pot." o "Apuesta total Ganancias pot." / "2,00€ 4,29€".
+  const lineas = textoNormalizado.split(/\r?\n/);
   const resumenDosColumnas = lineas.flatMap((linea, indice) => {
     const importesFila = [...linea.matchAll(/(\d+(?:[.,]\d{1,2})?)\s*€/g)];
     if (importesFila.length < 2) return [];
     const contexto = lineas.slice(Math.max(0, indice - 4), indice + 1).join(' ');
-    if (!/\bcantidad\b/i.test(contexto) || !/ganancias?\s+pot(?:encial(?:es)?)?/i.test(contexto)) return [];
+    if (
+      !/\b(?:cantidad|apuesta(?:\s+total)?|importe(?:\s+total)?|total\s+apostado)\b/i.test(contexto) ||
+      !/ganancias?\s+pot(?:encial(?:es)?)?|retorno\s+pot(?:encial)?|ganancia\s+posible/i.test(contexto)
+    ) {
+      return [];
+    }
     return [[importesFila[0][1], importesFila[1][1]]];
   }).at(-1);
-  // En los recibos confirmados la cuota aparece junto al nombre de la
-  // combinación y el importe en la misma fila, por ejemplo "Triple 2.88 2,00 €".
-  const resumenCombinadas = [...texto.matchAll(/\b(?:doble|triple|cu[aá]druple|quíntuple|sextuple|séxtuple)\s+(\d+[.,]\d{1,3})\s+(\d+(?:[.,]\d{1,2})?)\s*€?/gi)];
-  const cuotasCombinadas = [...texto.matchAll(/\b(?:doble|triple|cu[aá]druple|quíntuple|sextuple|séxtuple)\s+(\d+[.,]\d{1,3})\b/gi)];
-  const importe = numeroOCR(importesApostados.at(-1)?.[1] ?? resumenDosColumnas?.[0] ?? importesCantidad.at(-1)?.[1] ?? resumenCombinadas.at(-1)?.[2]);
+
+  // En los recibos confirmados (ej. bet365) la cuota aparece junto al nombre de la
+  // combinación y el importe en la misma fila: "Triple 2.88 2,00 €", "Cuatros 2.14 2,00€", "Cincos...", etc.
+  const patronCombinada = '(?:simples?|sencillas?|dobles?|triples?|cuatros?|cu[aá]druples?|cincos?|qu[ií]ntuples?|seis(?:es)?|s[eé]xtuples?|sietes?|s[eé]ptuples?|ochos?|[oó]ctuples?|nueves?|n[oó]nuples?|dieces?|d[eé]cuples?|combinadas?(?:\\s+de\\s+\\d+)?|acumuladas?(?:\\s+de\\s+\\d+)?|m[uú]ltiples?)';
+  const resumenCombinadas = [...textoNormalizado.matchAll(new RegExp(`\\b${patronCombinada}\\s+(?:x\\d+\\s+)?(\\d+[.,]\\d{1,3})\\s+(\\d+(?:[.,]\\d{1,2})?)\\s*€?`, 'gi'))];
+  const cuotasCombinadas = [...textoNormalizado.matchAll(new RegExp(`\\b${patronCombinada}\\s+(?:x\\d+\\s+)?(\\d+[.,]\\d{1,3})\\b`, 'gi'))];
+
+  // Respaldo genérico para filas de resumen con formato "<Tipo> <Cuota> <Importe> €"
+  const filaCuotaEImporte = lineas.flatMap((linea) => {
+    const m = linea.trim().match(/^[A-Za-zÁÉÍÓÚÜáéíóúüñÑ\s]{3,30}?\s+(\d+[.,]\d{1,3})\s+(\d+(?:[.,]\d{1,2})?)\s*€$/);
+    return m ? [[m[1], m[2]]] : [];
+  }).at(-1);
+
+  const importe = numeroOCR(
+    importesApostados.at(-1)?.[1] ??
+    resumenDosColumnas?.[0] ??
+    importesCantidad.at(-1)?.[1] ??
+    resumenCombinadas.at(-1)?.[2] ??
+    filaCuotaEImporte?.[1]
+  );
   const ganancia = numeroOCR(resumenDosColumnas?.[1] ?? ganancias.at(-1)?.[1]);
-  const cuotaExplicita = numeroOCR(cuotas.at(-1)?.[1] ?? cuotasCombinadas.at(-1)?.[1]);
+  const cuotaExplicita = numeroOCR(
+    cuotas.at(-1)?.[1] ??
+    cuotasCombinadas.at(-1)?.[1] ??
+    resumenCombinadas.at(-1)?.[1] ??
+    filaCuotaEImporte?.[0]
+  );
   const cuota = cuotaExplicita ?? (importe && ganancia ? ganancia / importe : null);
   return { importe, cuota, ganancia: ganancia ?? (importe && cuota ? importe * cuota : null) };
 }

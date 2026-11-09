@@ -145,14 +145,14 @@ function extraerHorarioTurno(evento: unknown): { inicio: string; fin: string; ho
 function esEventoDeTrabajo(evento: unknown): boolean {
   if (!evento) return false;
   if (typeof evento === 'string') {
-    return /turno|trabajo|condis/i.test(evento);
+    return /turno|trabajo|condis|biba/i.test(evento);
   }
 
   const ev = evento as EventoTurno;
   if (ev.tipo === 'deporte' || ev.categoria === 'Deportes') return false;
 
   const tit = (ev.titulo || '').toLowerCase();
-  const coincideTitulo = /turno|trabajo|condis/i.test(tit);
+  const coincideTitulo = /turno|trabajo|condis|biba/i.test(tit);
   const coincideTipo = ev.tipo === 'trabajo' || ev.categoria === 'trabajo' || ev.categoria === 'laboral';
   const tieneRangoFin = Boolean(ev.hora && ev.hora !== '--:--' && ev.horaFin && ev.horaFin !== '--:--');
 
@@ -754,16 +754,31 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
             </div>
           </div>
 
-          <span style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            padding: '3px 8px',
-            borderRadius: '20px',
-            backgroundColor: 'rgba(255, 255, 255, 0.18)',
-            color: '#fee2e2'
-          }}>
-            {turnosAna.length} {turnosAna.length === 1 ? 'turno' : 'turnos'}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Logo de Biba representativo para los turnos de Ana */}
+            <img
+              src="/biba.jpeg"
+              alt="Biba"
+              style={{
+                maxHeight: '22px',
+                width: 'auto',
+                objectFit: 'contain',
+                borderRadius: '4px',
+                backgroundColor: '#ffffff',
+                padding: '2px 4px'
+              }}
+            />
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 800,
+              padding: '3px 8px',
+              borderRadius: '20px',
+              backgroundColor: 'rgba(255, 255, 255, 0.18)',
+              color: '#fee2e2'
+            }}>
+              {turnosAna.length} {turnosAna.length === 1 ? 'turno' : 'turnos'}
+            </span>
+          </div>
         </div>
 
         {/* CONTADOR PROMINENTE DE HORAS DE ANA */}
@@ -842,9 +857,12 @@ export default function ContadorHorasTrabajadas({ onIrAPlanificador }: ContadorH
                     backgroundColor: '#fee2e2',
                     borderBottom: grupo.turnos.length > 0 ? '1px solid #fecdd3' : 'none'
                   }}>
-                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#b91c1c' }}>
-                      {grupo.etiqueta}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#b91c1c' }}>
+                        {grupo.etiqueta}
+                      </span>
+                      <img src="/biba.jpeg" alt="Biba" style={{ maxHeight: '14px', width: 'auto', objectFit: 'contain', borderRadius: '3px', backgroundColor: '#fff', padding: '1px 3px' }} />
+                    </div>
                     <span style={{
                       fontSize: '12px',
                       fontWeight: 900,
