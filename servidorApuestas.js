@@ -12,7 +12,7 @@ if (
 const axios = require('axios');
 const http = require('http');
 
-const API_KEY = process.env.FOOTBALL_DATA_KEY || 'd3d260c4e5784987a9dcc95c5558bbc9';
+const API_KEY = process.env.FOOTBALL_DATA_KEY;
 const BASE_URL = 'https://api.football-data.org/v4';
 const PORT = process.env.PORT || 3001;
 
@@ -422,6 +422,14 @@ const CACHE_TTL_MS = 60 * 1000;
  * de zona media (8-12) y devuelve el Top 5 de partidos más rentables.
  */
 async function obtenerPropuestasPartidos() {
+  const apiKeyActual = process.env.FOOTBALL_DATA_KEY || API_KEY;
+  if (!apiKeyActual) {
+    throw new Error(
+      'Falta configurar la variable de entorno FOOTBALL_DATA_KEY en el servidor (Vercel > Settings > Environment Variables).'
+    );
+  }
+  apiClient.defaults.headers['X-Auth-Token'] = apiKeyActual;
+
   const ahora = Date.now();
   if (cacheDatos && ahora - cacheTimestamp < CACHE_TTL_MS) {
     return cacheDatos;
