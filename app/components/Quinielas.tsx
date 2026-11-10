@@ -35,6 +35,23 @@ interface QuinielasProps {
   usuario: { email?: string | null; displayName?: string | null } | null;
 }
 
+interface PartidoRachaIA {
+  matchId: number;
+  fechaUTC?: string;
+  jornada?: number | null;
+  resultado: 'Victoria' | 'Empate' | 'Derrota' | string;
+  marcador: string;
+  condicion: 'LOCAL' | 'VISITANTE' | string;
+  esLocal: boolean;
+  escudoRival?: string | null;
+  rival?: {
+    id?: number | null;
+    nombre?: string;
+    nombreCorto?: string;
+    escudo?: string | null;
+  };
+}
+
 interface EquipoIA {
   id: number;
   nombre: string;
@@ -43,6 +60,7 @@ interface EquipoIA {
   posicionTabla?: number | null;
   puntos?: number | null;
   xG?: number | null;
+  ultimos5Partidos?: PartidoRachaIA[];
 }
 
 interface PartidoIA {
@@ -69,6 +87,10 @@ interface PartidoIA {
   equipos: {
     local: EquipoIA;
     visitante: EquipoIA;
+  };
+  rachaUltimos5?: {
+    local?: PartidoRachaIA[];
+    visitante?: PartidoRachaIA[];
   };
   metricasXG?: {
     disponible?: boolean;
@@ -309,11 +331,11 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
   const [indiceIA, setIndiceIA] = useState(0);
   const [ejecutandoIA, setEjecutandoIA] = useState(false);
   const [errorIA, setErrorIA] = useState('');
-  const [generadoEnIA, setGeneradoEnIA] = useState('');
 
   const ejecutarScriptIA = async () => {
     setEjecutandoIA(true);
     setErrorIA('');
+    window.dispatchEvent(new CustomEvent('quinielas:estado-ia', { detail: { ejecutando: true } }));
     try {
       let respuesta: Response;
       try {
@@ -329,7 +351,6 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
       const lista = Array.isArray(datos.partidos) ? datos.partidos.slice(0, 5) : [];
       setPartidosIA(lista);
       setIndiceIA(0);
-      setGeneradoEnIA(datos.generadoEn || new Date().toISOString());
       if (lista.length === 0) {
         setErrorIA('El script se ejecutó correctamente, pero no se encontraron partidos dentro del rango de cuota objetivo en los próximos 14 días.');
       }
@@ -338,6 +359,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
       setErrorIA(`No se pudo obtener el análisis IA: ${detalle}`);
     } finally {
       setEjecutandoIA(false);
+      window.dispatchEvent(new CustomEvent('quinielas:estado-ia', { detail: { ejecutando: false } }));
     }
   };
 
@@ -454,6 +476,16 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
     };
     window.addEventListener('quinielas:reiniciar-estadisticas', manejarReinicioExterno);
     return () => window.removeEventListener('quinielas:reiniciar-estadisticas', manejarReinicioExterno);
+  });
+
+  useEffect(() => {
+    const manejarEjecutarIAExterno = () => {
+      if (!ejecutandoIA) {
+        void ejecutarScriptIA();
+      }
+    };
+    window.addEventListener('quinielas:ejecutar-ia', manejarEjecutarIAExterno);
+    return () => window.removeEventListener('quinielas:ejecutar-ia', manejarEjecutarIAExterno);
   });
 
   const resumen = useMemo(() => {
@@ -779,79 +811,6 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
 
       {vista === 'ia' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* BARRA DE ACCIÓN SUPERIOR: EJECUTAR SCRIPT Y ESTADO */}
-          <div
-            style={{
-              background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
-              borderRadius: 18,
-              padding: '18px 20px',
-              color: '#ffffff',
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 14,
-              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.14)',
-            }}
-          >
-            <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span
-                  style={{
-                    background: 'rgba(56, 189, 248, 0.2)',
-                    border: '1px solid rgba(56, 189, 248, 0.45)',
-                    color: '#7dd3fc',
-                    fontSize: 11,
-                    fontWeight: 800,
-                    padding: '3px 9px',
-                    borderRadius: 999,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}
-                >
-                  Top 5 Ranking IA
-                </span>
-                {generadoEnIA && (
-                  <span style={{ fontSize: 11, color: '#cbd5e1' }}>
-                    Actualizado {new Date(generadoEnIA).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
-              </div>
-              <div style={{ fontSize: 16, fontWeight: 800, marginTop: 6 }}>
-                 Escáner de Valor en Ligas Europeas
-              </div>
-              <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 2 }}>
-                Ejecuta el script para analizar clasificaciones, xG y cuotas estimadas y pintar los 5 mejores pronósticos.
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={ejecutarScriptIA}
-              disabled={ejecutandoIA}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                padding: '12px 18px',
-                borderRadius: 12,
-                border: '1px solid #38bdf8',
-                background: ejecutandoIA
-                  ? 'rgba(56, 189, 248, 0.25)'
-                  : 'linear-gradient(90deg, #0284c7 0%, #2563eb 100%)',
-                color: '#ffffff',
-                fontWeight: 800,
-                fontSize: 14,
-                cursor: ejecutandoIA ? 'wait' : 'pointer',
-                boxShadow: ejecutandoIA ? 'none' : '0 4px 14px rgba(2, 132, 199, 0.4)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span>{ejecutandoIA ? '⏳ Analizando ligas…' : '⚡ Ejecutar Script IA'}</span>
-            </button>
-          </div>
-
           {errorIA && (
             <div
               role="alert"
@@ -1071,164 +1030,6 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
               </div>
             </div>
 
-            {/* BLOQUE DE FILAS ESCUDO + EQUIPO (FIEL AL BOCETO ADJUNTO) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '64px minmax(0, 1fr)',
-                  gap: 12,
-                  padding: '0 4px',
-                  fontSize: 12,
-                  fontWeight: 800,
-                  color: '#475569',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                }}
-              >
-                <span style={{ textAlign: 'center' }}>Escudo</span>
-                <span>Equipo y posición</span>
-              </div>
-
-              {/* FILA 1: LOCAL */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '64px minmax(0, 1fr)',
-                  gap: 12,
-                  alignItems: ' stretch',
-                }}
-              >
-                <div
-                  style={{
-                    width: 64,
-                    height: 64,
-                    border: '2px solid #0f172a',
-                    borderRadius: 12,
-                    background: '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 8,
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={matchActual?.equipos?.local?.escudo || '/placeholder.png'}
-                    alt={matchActual?.equipos?.local?.nombre || 'Escudo Local'}
-                    onError={manejarErrorEscudo}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                </div>
-                <div
-                  style={{
-                    border: '2px solid #0f172a',
-                    borderRadius: 12,
-                    padding: '10px 14px',
-                    background: matchActual?.equipos?.local?.esTop5 ? '#f0fdf4' : '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 850, color: '#0f172a', overflowWrap: 'anywhere' }}>
-                      {matchActual?.equipos?.local?.nombre || '—'}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#475569', marginTop: 2, fontWeight: 600 }}>
-                      Local · Posición:{' '}
-                      <strong>
-                        {matchActual?.equipos?.local?.posicionTabla ? `#${matchActual.equipos.local.posicionTabla}º` : '—'}
-                      </strong>
-                      {matchActual?.equipos?.local?.puntos != null ? ` (${matchActual.equipos.local.puntos} pts)` : ''}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    {matchActual?.equipos?.local?.esTop5 && (
-                      <span style={{ background: '#dcfce7', color: '#15803d', fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 8 }}>
-                        ⭐ Top 5
-                      </span>
-                    )}
-                    <span style={{ background: '#f1f5f9', color: '#334155', fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 8 }}>
-                      xG: {matchActual?.equipos?.local?.xG ?? matchActual?.metricasXG?.xGLocal ?? '—'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* FILA 2: VISITANTE */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '64px minmax(0, 1fr)',
-                  gap: 12,
-                  alignItems: 'stretch',
-                }}
-              >
-                <div
-                  style={{
-                    width: 64,
-                    height: 64,
-                    border: '2px solid #0f172a',
-                    borderRadius: 12,
-                    background: '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 8,
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={matchActual?.equipos?.visitante?.escudo || '/placeholder.png'}
-                    alt={matchActual?.equipos?.visitante?.nombre || 'Escudo Visitante'}
-                    onError={manejarErrorEscudo}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                </div>
-                <div
-                  style={{
-                    border: '2px solid #0f172a',
-                    borderRadius: 12,
-                    padding: '10px 14px',
-                    background: matchActual?.equipos?.visitante?.esTop5 ? '#f0fdf4' : '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 850, color: '#0f172a', overflowWrap: 'anywhere' }}>
-                      {matchActual?.equipos?.visitante?.nombre || '—'}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#475569', marginTop: 2, fontWeight: 600 }}>
-                      Visitante · Posición:{' '}
-                      <strong>
-                        {matchActual?.equipos?.visitante?.posicionTabla ? `#${matchActual.equipos.visitante.posicionTabla}º` : '—'}
-                      </strong>
-                      {matchActual?.equipos?.visitante?.puntos != null ? ` (${matchActual.equipos.visitante.puntos} pts)` : ''}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    {matchActual?.equipos?.visitante?.esTop5 && (
-                      <span style={{ background: '#dcfce7', color: '#15803d', fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 8 }}>
-                        ⭐ Top 5
-                      </span>
-                    )}
-                    <span style={{ background: '#f1f5f9', color: '#334155', fontSize: 11, fontWeight: 800, padding: '4px 8px', borderRadius: 8 }}>
-                      xG: {matchActual?.equipos?.visitante?.xG ?? matchActual?.metricasXG?.xGVisitante ?? '—'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* 3. REJILLA DE CASILLAS CON DATOS: CUOTA ESTIMADA, MERCADO PROPUESTO, PROBABILIDAD %, BRECHA DE PUNTOS Y MÉTRICAS DE XG */}
             <div
               style={{
@@ -1359,6 +1160,288 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                     ? ` (Δ ${matchActual.analisisValor.diferenciaXG >= 0 ? '+' : ''}${matchActual.analisisValor.diferenciaXG})`
                     : ''}
                 </span>
+              </div>
+            </div>
+
+            {/* 3.5. PANEL DE FORMA DEL EQUIPO / RACHA DE LOS ÚLTIMOS 5 PARTIDOS (ESTILO FLASHSCORE) */}
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 16,
+                padding: '14px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  borderBottom: '1px solid #e2e8f0',
+                  paddingBottom: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 850,
+                    color: '#0f172a',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.4px',
+                  }}
+                >
+                  📊 Forma del equipo · Últimos 5 partidos
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 999, background: '#16a34a', display: 'inline-block' }} />
+                    Victoria
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 999, background: '#64748b', display: 'inline-block' }} />
+                    Empate
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 999, background: '#dc2626', display: 'inline-block' }} />
+                    Derrota
+                  </span>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 14,
+                }}
+              >
+                {([
+                  {
+                    etiqueta: 'Local',
+                    equipo: matchActual?.equipos?.local,
+                    racha:
+                      matchActual?.equipos?.local?.ultimos5Partidos ||
+                      matchActual?.rachaUltimos5?.local ||
+                      [],
+                  },
+                  {
+                    etiqueta: 'Visitante',
+                    equipo: matchActual?.equipos?.visitante,
+                    racha:
+                      matchActual?.equipos?.visitante?.ultimos5Partidos ||
+                      matchActual?.rachaUltimos5?.visitante ||
+                      [],
+                  },
+                ] as const).map((columna) => (
+                  <div
+                    key={columna.etiqueta}
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 12,
+                      padding: '10px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        paddingBottom: 6,
+                        borderBottom: '1px solid #f1f5f9',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={columna.equipo?.escudo || '/placeholder.png'}
+                          alt={columna.equipo?.nombre || columna.etiqueta}
+                          onError={manejarErrorEscudo}
+                          style={{ width: 22, height: 22, objectFit: 'contain', flexShrink: 0 }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 800,
+                            color: '#0f172a',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {columna.equipo?.nombre || `Equipo ${columna.etiqueta}`}
+                        </span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          color: '#475569',
+                          background: '#f1f5f9',
+                          padding: '2px 6px',
+                          borderRadius: 6,
+                          textTransform: 'uppercase',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {columna.etiqueta}
+                      </span>
+                    </div>
+
+                    {columna.racha.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {columna.racha.slice(0, 5).map((item, idx) => {
+                          const esVictoria = item.resultado === 'Victoria';
+                          const esDerrota = item.resultado === 'Derrota';
+                          const fondoPastilla = esVictoria
+                            ? 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)'
+                            : esDerrota
+                            ? 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'
+                            : 'linear-gradient(135deg, #64748b 0%, #475569 100%)';
+                          const bordePastilla = esVictoria
+                            ? '#15803d'
+                            : esDerrota
+                            ? '#b91c1c'
+                            : '#475569';
+                          const jugoDeLocal =
+                            typeof item.esLocal === 'boolean'
+                              ? item.esLocal
+                              : item.condicion === 'LOCAL';
+                          const escudoRivalUrl =
+                            item.escudoRival || item.rival?.escudo || '/placeholder.png';
+                          const nombreRival =
+                            item.rival?.nombreCorto || item.rival?.nombre || 'Rival';
+
+                          const nodoEscudoRival = (
+                            <div
+                              title={`Rival: ${nombreRival} (${jugoDeLocal ? 'Jugó en Casa' : 'Jugó Fuera'})`}
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 7,
+                                background: '#ffffff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: 3,
+                                boxSizing: 'border-box',
+                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.18)',
+                              }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={escudoRivalUrl}
+                                alt={`Escudo ${nombreRival}`}
+                                onError={manejarErrorEscudo}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                              />
+                            </div>
+                          );
+
+                          const nodoCondicion = (
+                            <span
+                              title={jugoDeLocal ? 'Jugó como Local (Casa)' : 'Jugó como Visitante (Fuera)'}
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 800,
+                                color: 'rgba(255, 255, 255, 0.92)',
+                                background: 'rgba(255, 255, 255, 0.18)',
+                                borderRadius: 6,
+                                padding: '4px 0',
+                                textAlign: 'center',
+                                letterSpacing: '0.3px',
+                              }}
+                            >
+                              {jugoDeLocal ? 'L' : 'V'}
+                            </span>
+                          );
+
+                          return (
+                            <div
+                              key={item.matchId || idx}
+                              title={`${item.resultado} (${item.marcador}) · ${jugoDeLocal ? 'Local' : 'Visitante'} vs ${nombreRival}`}
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '28px 1fr 28px',
+                                alignItems: 'center',
+                                gap: 8,
+                                padding: '5px 9px',
+                                borderRadius: 10,
+                                background: fondoPastilla,
+                                border: `1px solid ${bordePastilla}`,
+                                color: '#ffffff',
+                                boxShadow: '0 2px 5px rgba(15, 23, 42, 0.08)',
+                              }}
+                            >
+                              {/* Si jugó como visitante, el rival era local (izquierda); si jugó como local, mostramos indicador L a la izquierda */}
+                              {jugoDeLocal ? nodoCondicion : nodoEscudoRival}
+
+                              {/* Centro de la pastilla: Marcador numérico y nombre corto del rival */}
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  lineHeight: 1.1,
+                                  minWidth: 0,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: 900,
+                                    letterSpacing: '0.6px',
+                                  }}
+                                >
+                                  {item.marcador}
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    color: 'rgba(255, 255, 255, 0.88)',
+                                    maxWidth: '100%',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    marginTop: 1,
+                                  }}
+                                >
+                                  {jugoDeLocal ? `vs ${nombreRival}` : `@ ${nombreRival}`}
+                                </span>
+                              </div>
+
+                              {/* Si jugó como local, el rival era visitante (derecha); si jugó como visitante, mostramos indicador V a la derecha */}
+                              {jugoDeLocal ? nodoEscudoRival : nodoCondicion}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#94a3b8',
+                          textAlign: 'center',
+                          padding: '14px 8px',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Sin racha cargada todavía
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 

@@ -325,10 +325,12 @@ function calcularPuntuacionEstrategica({
 }
 
 /**
- * Obtiene los próximos partidos de una liga dentro de los próximos 14 días
- * y filtra localmente aquellos con estado 'SCHEDULED' o 'TIMED'.
+ * Obtiene los partidos de la temporada de una liga en una única llamada para:
+ * 1) Filtrar los próximos partidos dentro de los próximos 14 días ('SCHEDULED' o 'TIMED')
+ * 2) Conservar los partidos ya jugados ('FINISHED') y extraer los últimos 5 de cada equipo
+ *    sin consumir llamadas adicionales del límite gratuito de football-data.org (10 req/min).
  */
-async function obtenerProximosPartidos(leagueCode) {
+async function obtenerPartidosLiga(leagueCode) {
   const hoy = new Date();
   const fechaHoy = formatearFechaISO(hoy);
 
@@ -336,17 +338,92 @@ async function obtenerProximosPartidos(leagueCode) {
   fechaLimite.setDate(hoy.getDate() + 14);
   const fechaHasta = formatearFechaISO(fechaLimite);
 
-  const response = await apiClient.get(`/competitions/${leagueCode}/matches`, {
-    params: {
-      dateFrom: fechaHoy,
-      dateTo: fechaHasta,
-    },
+  const response = await apiClient.get(`/competitions/${leagueCode}/matches`);
+  const allMatches = response.data?.matches || [];
+
+  const proximosPartidos = allMatches.filter((match) => {
+    if (match.status !== 'SCHEDULED' && match.status !== 'TIMED') return false;
+    const fechaPartido = (match.utcDate || '').slice(0, 10);
+    return fechaPartido >= fechaHoy && fechaPartido <= fechaHasta;
   });
 
-  const matches = response.data?.matches || [];
-  return matches.filter(
-    (match) => match.status === 'SCHEDULED' || match.status === 'TIMED'
+  const partidosFinalizados = allMatches.filter(
+    (match) =>
+      match.status === 'FINISHED' &&
+      match.score?.fullTime?.home != null &&
+      match.score?.fullTime?.away != null
   );
+
+  return {
+    proximosPartidos,
+    partidosFinalizados,
+  };
+}
+
+/**
+ * Extrae los últimos 5 partidos finalizados de un equipo ordenados del más reciente al más antiguo.
+ * Cada elemento incluye:
+ * - resultado: 'Victoria' | 'Empate' | 'Derrota'
+ * - marcador: ej. "2-0", "1-1"
+ * - escudoRival: URL del escudo ('crest') del rival
+ * - condicion: 'LOCAL' | 'VISITANTE' (y booleano esLocal)
+ */
+function extraerUltimos5PartidosEquipo(teamId, partidosFinalizados, totalStatsMap) {
+  if (!teamId || !Array.isArray(partidosFinalizados)) return [];
+
+  const jugadosPorEquipo = partidosFinalizados
+    .filter(
+      (match) =>
+        match.homeTeam?.id === teamId || match.awayTeam?.id === teamId
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.utcDate || 0).getTime() - new Date(a.utcDate || 0).getTime()
+    )
+    .slice(0, 5);
+
+  return jugadosPorEquipo.map((match) => {
+    const esLocal = match.homeTeam?.id === teamId;
+    const condicion = esLocal ? 'LOCAL' : 'VISITANTE';
+    const equipoRival = esLocal ? match.awayTeam : match.homeTeam;
+    const rivalStats = totalStatsMap?.get(equipoRival?.id);
+
+    const golesLocal = Number(match.score?.fullTime?.home ?? 0);
+    const golesVisitante = Number(match.score?.fullTime?.away ?? 0);
+    const marcador = `${golesLocal}-${golesVisitante}`;
+
+    const golesFavor = esLocal ? golesLocal : golesVisitante;
+    const golesContra = esLocal ? golesVisitante : golesLocal;
+
+    let resultado = 'Empate';
+    if (golesFavor > golesContra) {
+      resultado = 'Victoria';
+    } else if (golesFavor < golesContra) {
+      resultado = 'Derrota';
+    }
+
+    const escudoRival =
+      equipoRival?.crest ||
+      (rivalStats ? rivalStats.crest : null) ||
+      '/placeholder.png';
+
+    return {
+      matchId: match.id,
+      fechaUTC: match.utcDate,
+      jornada: match.matchday || null,
+      resultado,
+      marcador,
+      condicion,
+      esLocal,
+      escudoRival,
+      rival: {
+        id: equipoRival?.id || null,
+        nombre: equipoRival?.name || 'Rival',
+        nombreCorto: equipoRival?.shortName || equipoRival?.name || 'Rival',
+        escudo: escudoRival,
+      },
+    };
+  });
 }
 
 /**
@@ -453,7 +530,10 @@ async function obtenerPropuestasPartidos() {
 
       if (seasonYear) temporadaDetectada = seasonYear;
 
-      const matches = await obtenerProximosPartidos(league.code);
+      const {
+        proximosPartidos: matches,
+        partidosFinalizados,
+      } = await obtenerPartidosLiga(league.code);
       let descartadosDueloDirectoLiga = 0;
       let descartadosPorCuotaLiga = 0;
 
@@ -530,6 +610,17 @@ async function obtenerPropuestasPartidos() {
             evaluacionEstrategica,
           });
 
+          const rachaLocal = extraerUltimos5PartidosEquipo(
+            home.id,
+            partidosFinalizados,
+            statsContext.totalStatsMap
+          );
+          const rachaVisitante = extraerUltimos5PartidosEquipo(
+            away.id,
+            partidosFinalizados,
+            statsContext.totalStatsMap
+          );
+
           return {
             matchId: match.id,
             liga: {
@@ -560,6 +651,7 @@ async function obtenerPropuestasPartidos() {
                 posicionTabla: homeGeneral ? homeGeneral.position : null,
                 puntos: homeGeneral ? homeGeneral.points : null,
                 xG: metricasXG.xGLocal,
+                ultimos5Partidos: rachaLocal,
               },
               visitante: {
                 id: away.id,
@@ -569,7 +661,12 @@ async function obtenerPropuestasPartidos() {
                 posicionTabla: awayGeneral ? awayGeneral.position : null,
                 puntos: awayGeneral ? awayGeneral.points : null,
                 xG: metricasXG.xGVisitante,
+                ultimos5Partidos: rachaVisitante,
               },
+            },
+            rachaUltimos5: {
+              local: rachaLocal,
+              visitante: rachaVisitante,
             },
             metricasXG,
             propuestaApuesta: propuesta,
