@@ -56,76 +56,155 @@ function redondear(valor) {
   return Math.round(valor * 100) / 100;
 }
 
+// Caché de datos de liga (10 min) para reservar cuota de peticiones al endpoint `/v4/teams/{teamId}/matches?status=FINISHED`
+const cacheLigas = new Map();
+const CACHE_LIGA_TTL_MS = 10 * 60 * 1000;
+
 /**
- * Obtiene la clasificación de una liga y extrae:
- * - El Top 5 de la tabla general (TOTAL)
- * - Mapas de estadísticas TOTAL, HOME y AWAY de todos los equipos para el cálculo de xG
+ * Obtiene en una única llamada por liga (`/competitions/{leagueCode}/matches`):
+ * - Clasificación general (TOTAL), LOCAL (HOME) y VISITANTE (AWAY)
+ * - El Top 5 de la tabla general
+ * - Próximos partidos en los siguientes 14 días y partidos finalizados de respaldo
  */
-async function obtenerDatosClasificacion(leagueCode) {
-  const response = await apiClient.get(`/competitions/${leagueCode}/standings`);
+async function obtenerDatosYPartidosLiga(leagueCode) {
+  const ahora = Date.now();
+  const enCache = cacheLigas.get(leagueCode);
+  if (enCache && ahora - enCache.timestamp < CACHE_LIGA_TTL_MS) {
+    return enCache.datos;
+  }
 
-  const standingsList = response.data?.standings || [];
-  const tablaTotal =
-    standingsList.find((s) => s.type === 'TOTAL')?.table ||
-    standingsList[0]?.table ||
-    [];
-  const tablaHome = standingsList.find((s) => s.type === 'HOME')?.table || [];
-  const tablaAway = standingsList.find((s) => s.type === 'AWAY')?.table || [];
+  const hoy = new Date();
+  const fechaHoy = formatearFechaISO(hoy);
+  const fechaLimite = new Date(hoy);
+  fechaLimite.setDate(hoy.getDate() + 14);
+  const fechaHasta = formatearFechaISO(fechaLimite);
 
-  const top5Map = new Map();
-  const totalStatsMap = new Map();
+  const response = await apiClient.get(`/competitions/${leagueCode}/matches`);
+  const allMatches = response.data?.matches || [];
+
+  const totalTemp = new Map();
   const homeStatsMap = new Map();
   const awayStatsMap = new Map();
 
-  tablaTotal.forEach((item) => {
-    const info = {
-      id: item.team.id,
-      name: item.team.name,
-      shortName: item.team.shortName || item.team.name,
-      crest: item.team.crest || null,
-      position: item.position,
-      points: item.points,
-      playedGames: item.playedGames,
-      goalsFor: item.goalsFor,
-      goalsAgainst: item.goalsAgainst,
-    };
-    totalStatsMap.set(item.team.id, info);
+  const asegurarEquipo = (team) => {
+    if (!team?.id) return;
+    if (!totalTemp.has(team.id)) {
+      totalTemp.set(team.id, {
+        id: team.id,
+        name: team.name,
+        shortName: team.shortName || team.name,
+        crest: team.crest || null,
+        position: 0,
+        points: 0,
+        playedGames: 0,
+        goalsFor: 0,
+        goalsAgainst: 0,
+      });
+    }
+    if (!homeStatsMap.has(team.id)) {
+      homeStatsMap.set(team.id, { playedGames: 0, goalsFor: 0, goalsAgainst: 0 });
+    }
+    if (!awayStatsMap.has(team.id)) {
+      awayStatsMap.set(team.id, { playedGames: 0, goalsFor: 0, goalsAgainst: 0 });
+    }
+  };
 
-    if (item.position <= 5) {
-      top5Map.set(item.team.id, info);
+  const proximosPartidos = [];
+  const partidosFinalizados = [];
+
+  allMatches.forEach((match) => {
+    asegurarEquipo(match.homeTeam);
+    asegurarEquipo(match.awayTeam);
+
+    if (match.status === 'SCHEDULED' || match.status === 'TIMED') {
+      const fechaPartido = (match.utcDate || '').slice(0, 10);
+      if (fechaPartido >= fechaHoy && fechaPartido <= fechaHasta) {
+        proximosPartidos.push(match);
+      }
+    } else if (
+      match.status === 'FINISHED' &&
+      match.score?.fullTime?.home != null &&
+      match.score?.fullTime?.away != null
+    ) {
+      partidosFinalizados.push(match);
+      const hg = Number(match.score.fullTime.home);
+      const ag = Number(match.score.fullTime.away);
+      const homeId = match.homeTeam?.id;
+      const awayId = match.awayTeam?.id;
+
+      const hTotal = totalTemp.get(homeId);
+      const aTotal = totalTemp.get(awayId);
+      const hHome = homeStatsMap.get(homeId);
+      const aAway = awayStatsMap.get(awayId);
+
+      if (hTotal && hHome) {
+        hTotal.playedGames += 1;
+        hTotal.goalsFor += hg;
+        hTotal.goalsAgainst += ag;
+        hTotal.points += hg > ag ? 3 : hg === ag ? 1 : 0;
+
+        hHome.playedGames += 1;
+        hHome.goalsFor += hg;
+        hHome.goalsAgainst += ag;
+      }
+
+      if (aTotal && aAway) {
+        aTotal.playedGames += 1;
+        aTotal.goalsFor += ag;
+        aTotal.goalsAgainst += hg;
+        aTotal.points += ag > hg ? 3 : ag === hg ? 1 : 0;
+
+        aAway.playedGames += 1;
+        aAway.goalsFor += ag;
+        aAway.goalsAgainst += hg;
+      }
     }
   });
 
-  tablaHome.forEach((item) => {
-    homeStatsMap.set(item.team.id, {
-      playedGames: item.playedGames,
-      goalsFor: item.goalsFor,
-      goalsAgainst: item.goalsAgainst,
-    });
+  const tablaOrdenada = Array.from(totalTemp.values()).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    const diffA = a.goalsFor - a.goalsAgainst;
+    const diffB = b.goalsFor - b.goalsAgainst;
+    if (diffB !== diffA) return diffB - diffA;
+    if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+    return String(a.name).localeCompare(String(b.name));
   });
 
-  tablaAway.forEach((item) => {
-    awayStatsMap.set(item.team.id, {
-      playedGames: item.playedGames,
-      goalsFor: item.goalsFor,
-      goalsAgainst: item.goalsAgainst,
-    });
+  const top5Map = new Map();
+  const totalStatsMap = new Map();
+
+  tablaOrdenada.forEach((info, idx) => {
+    info.position = idx + 1;
+    totalStatsMap.set(info.id, info);
+    if (info.position <= 5) {
+      top5Map.set(info.id, info);
+    }
   });
 
-  const startDate = response.data?.season?.startDate || '';
+  const seasonObj = allMatches[0]?.season || response.data?.season || {};
+  const startDate = seasonObj.startDate || '';
   const seasonYear = startDate ? Number(startDate.split('-')[0]) : 2026;
-  const currentMatchday = response.data?.season?.currentMatchday || null;
+  const currentMatchday = seasonObj.currentMatchday || null;
 
-  return {
+  const resultado = {
     seasonYear,
     currentMatchday,
     top5Map,
+    proximosPartidos,
+    partidosFinalizados,
     statsContext: {
       totalStatsMap,
       homeStatsMap,
       awayStatsMap,
     },
   };
+
+  cacheLigas.set(leagueCode, {
+    timestamp: ahora,
+    datos: resultado,
+  });
+
+  return resultado;
 }
 
 /**
@@ -361,12 +440,41 @@ async function obtenerPartidosLiga(leagueCode) {
 }
 
 /**
- * Extrae los últimos 5 partidos finalizados de un equipo ordenados del más reciente al más antiguo.
- * Cada elemento incluye:
- * - resultado: 'Victoria' | 'Empate' | 'Derrota'
- * - marcador: ej. "2-0", "1-1"
- * - escudoRival: URL del escudo ('crest') del rival
- * - condicion: 'LOCAL' | 'VISITANTE' (y booleano esLocal)
+ * Devuelve una etiqueta corta legible para la insignia de competición ('CL', 'LIGA', 'COPA', etc.)
+ */
+function obtenerEtiquetaCompeticion(code, name, type) {
+  const codigo = String(code || '').toUpperCase();
+  const nombre = String(name || '').toLowerCase();
+  const tipo = String(type || '').toUpperCase();
+
+  if (codigo === 'CL' || nombre.includes('champions')) return 'CL';
+  if (codigo === 'EL' || nombre.includes('europa league')) return 'EL';
+  if (codigo === 'UCL' || nombre.includes('conference')) return 'CONF';
+  if (
+    tipo === 'CUP' ||
+    nombre.includes('copa') ||
+    nombre.includes('cup') ||
+    nombre.includes('pokal') ||
+    nombre.includes('coppa') ||
+    nombre.includes('coupe') ||
+    nombre.includes('supercup') ||
+    nombre.includes('supercopa')
+  ) {
+    return 'COPA';
+  }
+  if (
+    ['PD', 'PL', 'BL1', 'SA', 'FL1', 'DED', 'PPL', 'ELC', 'BSA'].includes(codigo) ||
+    tipo === 'LEAGUE'
+  ) {
+    return 'LIGA';
+  }
+  return codigo || 'LIGA';
+}
+
+/**
+ * Formatea y ordena por fecha descendente los últimos 5 partidos finalizados de un equipo
+ * sin importar la competición (Champions League, Copa, Liga, etc.).
+ * Incluye el nombre y código de la competición (`match.competition.name` / `match.competition.code`).
  */
 function extraerUltimos5PartidosEquipo(teamId, partidosFinalizados, totalStatsMap) {
   if (!teamId || !Array.isArray(partidosFinalizados)) return [];
@@ -374,7 +482,10 @@ function extraerUltimos5PartidosEquipo(teamId, partidosFinalizados, totalStatsMa
   const jugadosPorEquipo = partidosFinalizados
     .filter(
       (match) =>
-        match.homeTeam?.id === teamId || match.awayTeam?.id === teamId
+        match.status === 'FINISHED' &&
+        match.score?.fullTime?.home != null &&
+        match.score?.fullTime?.away != null &&
+        (match.homeTeam?.id === teamId || match.awayTeam?.id === teamId)
     )
     .sort(
       (a, b) =>
@@ -407,6 +518,14 @@ function extraerUltimos5PartidosEquipo(teamId, partidosFinalizados, totalStatsMa
       (rivalStats ? rivalStats.crest : null) ||
       '/placeholder.png';
 
+    const competicionCodigo = match.competition?.code || '';
+    const competicionNombre = match.competition?.name || 'Liga';
+    const competicionEtiqueta = obtenerEtiquetaCompeticion(
+      competicionCodigo,
+      competicionNombre,
+      match.competition?.type
+    );
+
     return {
       matchId: match.id,
       fechaUTC: match.utcDate,
@@ -416,6 +535,15 @@ function extraerUltimos5PartidosEquipo(teamId, partidosFinalizados, totalStatsMa
       condicion,
       esLocal,
       escudoRival,
+      competicionCodigo,
+      competicionNombre,
+      competicionEtiqueta,
+      competicion: {
+        codigo: competicionCodigo,
+        nombre: competicionNombre,
+        etiqueta: competicionEtiqueta,
+        emblema: match.competition?.emblem || null,
+      },
       rival: {
         id: equipoRival?.id || null,
         nombre: equipoRival?.name || 'Rival',
@@ -424,6 +552,66 @@ function extraerUltimos5PartidosEquipo(teamId, partidosFinalizados, totalStatsMa
       },
     };
   });
+}
+
+// Caché en memoria por equipo para `/v4/teams/{teamId}/matches?status=FINISHED`
+const cacheRachaEquipos = new Map();
+const CACHE_RACHA_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Consulta el endpoint global de partidos del equipo `/v4/teams/{teamId}/matches?status=FINISHED`,
+ * ordena por fecha descendente y toma los últimos 5 jugados sin importar la competición
+ * (Champions League, Copa y Liga). Si el plan gratuito alcanza el límite de peticiones por minuto,
+ * emplea como respaldo los partidos finalizados ya disponibles en memoria.
+ */
+async function obtenerUltimos5PartidosEquipoGlobal(
+  teamId,
+  fallbackPartidosFinalizados = [],
+  totalStatsMap = null
+) {
+  if (!teamId) return [];
+
+  const ahora = Date.now();
+  const enCache = cacheRachaEquipos.get(teamId);
+  if (enCache && ahora - enCache.timestamp < CACHE_RACHA_TTL_MS) {
+    return enCache.datos;
+  }
+
+  try {
+    const response = await apiClient.get(`/teams/${teamId}/matches`, {
+      params: {
+        status: 'FINISHED',
+      },
+    });
+    const matchesGlobal = Array.isArray(response.data?.matches)
+      ? response.data.matches
+      : [];
+    const rachaGlobal = extraerUltimos5PartidosEquipo(
+      teamId,
+      matchesGlobal,
+      totalStatsMap
+    );
+    if (rachaGlobal.length > 0) {
+      cacheRachaEquipos.set(teamId, {
+        timestamp: ahora,
+        datos: rachaGlobal,
+      });
+      return rachaGlobal;
+    }
+  } catch (error) {
+    const status = error.response?.status;
+    if (status !== 429) {
+      console.warn(
+        `⚠️ Aviso al consultar /teams/${teamId}/matches?status=FINISHED: ${error.message}`
+      );
+    }
+  }
+
+  return extraerUltimos5PartidosEquipo(
+    teamId,
+    fallbackPartidosFinalizados,
+    totalStatsMap
+  );
 }
 
 /**
@@ -525,15 +713,12 @@ async function obtenerPropuestasPartidos() {
         seasonYear,
         currentMatchday,
         top5Map,
-        statsContext,
-      } = await obtenerDatosClasificacion(league.code);
-
-      if (seasonYear) temporadaDetectada = seasonYear;
-
-      const {
         proximosPartidos: matches,
         partidosFinalizados,
-      } = await obtenerPartidosLiga(league.code);
+        statsContext,
+      } = await obtenerDatosYPartidosLiga(league.code);
+
+      if (seasonYear) temporadaDetectada = seasonYear;
       let descartadosDueloDirectoLiga = 0;
       let descartadosPorCuotaLiga = 0;
 
@@ -652,6 +837,7 @@ async function obtenerPropuestasPartidos() {
                 puntos: homeGeneral ? homeGeneral.points : null,
                 xG: metricasXG.xGLocal,
                 ultimos5Partidos: rachaLocal,
+                ultimos5PartidosFallback: partidosFinalizados,
               },
               visitante: {
                 id: away.id,
@@ -662,6 +848,7 @@ async function obtenerPropuestasPartidos() {
                 puntos: awayGeneral ? awayGeneral.points : null,
                 xG: metricasXG.xGVisitante,
                 ultimos5Partidos: rachaVisitante,
+                ultimos5PartidosFallback: partidosFinalizados,
               },
             },
             rachaUltimos5: {
@@ -737,6 +924,36 @@ async function obtenerPropuestasPartidos() {
       rankingValor: index + 1,
       ...partido,
     }));
+
+  // Consultar el endpoint global `/v4/teams/{teamId}/matches?status=FINISHED` para los equipos del Top 5
+  // Pasada 1: Equipos favoritos Top 5 (que disputan Champions League, Copa y Liga)
+  // Pasada 2: Equipos rivales
+  const colaEquipos = [];
+  for (const partido of top5Partidos) {
+    const localEsFavorito = Boolean(partido.equipos?.local?.esTop5);
+    const favClave = localEsFavorito ? 'local' : 'visitante';
+    const rivalClave = localEsFavorito ? 'visitante' : 'local';
+    colaEquipos.push({ partido, clave: favClave, prioridad: 1 });
+    colaEquipos.push({ partido, clave: rivalClave, prioridad: 2 });
+  }
+  colaEquipos.sort((a, b) => a.prioridad - b.prioridad);
+
+  for (const { partido, clave } of colaEquipos) {
+    const equipoObj = partido.equipos?.[clave];
+    if (!equipoObj?.id) continue;
+    const rachaGlobal = await obtenerUltimos5PartidosEquipoGlobal(
+      equipoObj.id,
+      equipoObj.ultimos5PartidosFallback || [],
+      null
+    );
+    if (rachaGlobal.length > 0) {
+      equipoObj.ultimos5Partidos = rachaGlobal;
+      if (partido.rachaUltimos5) {
+        partido.rachaUltimos5[clave] = rachaGlobal;
+      }
+    }
+    delete equipoObj.ultimos5PartidosFallback;
+  }
 
   const respuesta = {
     proveedor: 'football-data.org (v4)',

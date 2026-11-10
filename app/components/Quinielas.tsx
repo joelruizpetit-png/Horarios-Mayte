@@ -44,6 +44,15 @@ interface PartidoRachaIA {
   condicion: 'LOCAL' | 'VISITANTE' | string;
   esLocal: boolean;
   escudoRival?: string | null;
+  competicionCodigo?: string;
+  competicionNombre?: string;
+  competicionEtiqueta?: string;
+  competicion?: {
+    codigo?: string;
+    nombre?: string;
+    etiqueta?: string;
+    emblema?: string | null;
+  };
   rival?: {
     id?: number | null;
     nombre?: string;
@@ -1321,6 +1330,26 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                           const nombreRival =
                             item.rival?.nombreCorto || item.rival?.nombre || 'Rival';
 
+                          const compCodigo = (
+                            item.competicionCodigo ||
+                            item.competicion?.codigo ||
+                            ''
+                          ).toUpperCase();
+                          const compNombre =
+                            item.competicionNombre || item.competicion?.nombre || '';
+                          const compEtiqueta =
+                            item.competicionEtiqueta ||
+                            item.competicion?.etiqueta ||
+                            (compCodigo === 'CL' || compNombre.toLowerCase().includes('champions')
+                              ? 'CL'
+                              : compCodigo === 'EL' || compNombre.toLowerCase().includes('europa')
+                              ? 'EL'
+                              : compNombre.toLowerCase().includes('copa') ||
+                                compNombre.toLowerCase().includes('cup')
+                              ? 'COPA'
+                              : 'LIGA');
+                          const esChampions = compEtiqueta === 'CL' || compCodigo === 'CL';
+
                           const nodoEscudoRival = (
                             <div
                               title={`Rival: ${nombreRival} (${jugoDeLocal ? 'Jugó en Casa' : 'Jugó Fuera'})`}
@@ -1368,7 +1397,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                           return (
                             <div
                               key={item.matchId || idx}
-                              title={`${item.resultado} (${item.marcador}) · ${jugoDeLocal ? 'Local' : 'Visitante'} vs ${nombreRival}`}
+                              title={`[${compEtiqueta}${compNombre ? ` · ${compNombre}` : ''}] ${item.resultado} (${item.marcador}) · ${jugoDeLocal ? 'Local' : 'Visitante'} vs ${nombreRival}`}
                               style={{
                                 display: 'grid',
                                 gridTemplateColumns: '28px 1fr 28px',
@@ -1385,7 +1414,7 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                               {/* Si jugó como visitante, el rival era local (izquierda); si jugó como local, mostramos indicador L a la izquierda */}
                               {jugoDeLocal ? nodoCondicion : nodoEscudoRival}
 
-                              {/* Centro de la pastilla: Marcador numérico y nombre corto del rival */}
+                              {/* Centro de la pastilla: Marcador numérico, insignia de competición ('CL' / 'LIGA') y nombre corto del rival */}
                               <div
                                 style={{
                                   display: 'flex',
@@ -1396,15 +1425,34 @@ export default function Quinielas({ vista, usuario }: QuinielasProps) {
                                   minWidth: 0,
                                 }}
                               >
-                                <span
-                                  style={{
-                                    fontSize: 14,
-                                    fontWeight: 900,
-                                    letterSpacing: '0.6px',
-                                  }}
-                                >
-                                  {item.marcador}
-                                </span>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                  <span
+                                    style={{
+                                      fontSize: 14,
+                                      fontWeight: 900,
+                                      letterSpacing: '0.6px',
+                                    }}
+                                  >
+                                    {item.marcador}
+                                  </span>
+                                  <span
+                                    title={compNombre ? `${compNombre}${compCodigo ? ` (${compCodigo})` : ''}` : compEtiqueta}
+                                    style={{
+                                      fontSize: 9,
+                                      fontWeight: 900,
+                                      letterSpacing: '0.4px',
+                                      padding: '1px 5px',
+                                      borderRadius: 4,
+                                      background: esChampions ? '#fef08a' : 'rgba(15, 23, 42, 0.28)',
+                                      color: esChampions ? '#1e3a8a' : '#ffffff',
+                                      border: esChampions ? '1px solid #facc15' : '1px solid rgba(255, 255, 255, 0.28)',
+                                      textTransform: 'uppercase',
+                                      lineHeight: 1.25,
+                                    }}
+                                  >
+                                    {compEtiqueta}
+                                  </span>
+                                </div>
                                 <span
                                   style={{
                                     fontSize: 10,
