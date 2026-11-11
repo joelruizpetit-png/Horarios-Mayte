@@ -501,7 +501,7 @@ export function prepararPayloadGoogleCalendar(fechaClave: string, evento: Evento
     };
   }
 
-  const autor = evento.creador === 'A' ? 'Ana' : (evento.creador === 'J' ? 'Joel' : 'Planificador');
+  const autor = evento.creador === 'A' ? 'Ana' : (evento.creador === 'N' ? 'Natalia' : (evento.creador === 'J' ? 'Joel' : 'Planificador'));
   const summary = evento.titulo?.trim() || 'Evento Familiar';
   const description = `Evento de Planificador Familiar\nCreador: ${autor}${evento.tipo ? `\nTipo: ${evento.tipo}` : ''}`;
 

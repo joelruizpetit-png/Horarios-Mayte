@@ -222,8 +222,8 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
 
     if (esDeporte) return false;
 
-    // REGLA DE EXCLUSIVIDAD: Si fue creado por o está asignado a Ana ("A"), NO mostrar bajo ninguna circunstancia
-    if (creador === 'A' || creador === 'ANA' || creador.includes('ANA')) {
+    // REGLA DE EXCLUSIVIDAD: Si fue creado por o está asignado a Ana ("A") o Natalia ("N"), NO mostrar bajo ninguna circunstancia
+    if (creador === 'A' || creador === 'ANA' || creador.includes('ANA') || creador === 'N' || creador === 'NATALIA' || tipo === 'natalia') {
       return false;
     }
 
@@ -266,7 +266,10 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
   }, []);
 
   const guardarNota = async () => {
-    if (!nuevoEvento.titulo.trim()) {
+    const esModoNatalia = nuevoEvento.tipo === 'natalia' || (nuevoEvento.tipo === 'repetir' && categoriaRepeticion === 'natalia');
+    const tituloFinal = esModoNatalia ? (nuevoEvento.titulo.trim() || 'Natalia') : nuevoEvento.titulo.trim();
+
+    if (!tituloFinal) {
       alert("Por favor, introduce un título para el evento.");
       return;
     }
@@ -304,11 +307,11 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
           const notasDelDia = nuevosEventos[fechaClave] || [];
 
           const eventoAGuardar = {
-            titulo: nuevoEvento.titulo.trim(),
+            titulo: tituloFinal,
             hora: nuevoEvento.hora || "--:--",
-            horaFin: categoriaRepeticion === 'trabajo' ? (nuevoEvento.horaFin || "") : "",
+            horaFin: (categoriaRepeticion === 'trabajo' || categoriaRepeticion === 'natalia') ? (nuevoEvento.horaFin || "") : "",
             tipo: categoriaRepeticion,
-            creador: obtenerInicialCreador()
+            creador: categoriaRepeticion === 'natalia' ? 'N' : obtenerInicialCreador()
           };
 
           // Sincronizar con Google Calendar si está conectado
@@ -344,7 +347,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
         await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
         registrarActividad({
           seccion: 'agenda',
-          descripcion: `Nuevo evento recurrente: "${nuevoEvento.titulo.trim()}" (${eventosCreados} días)`,
+          descripcion: `Nuevo evento recurrente: "${tituloFinal}" (${eventosCreados} días)`,
           usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
         });
       } catch (error) {
@@ -354,16 +357,16 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
       return;
     }
 
-    // MODO NORMAL O TRABAJO (DÍA ÚNICO)
+    // MODO NORMAL, TRABAJO O NATALIA (DÍA ÚNICO)
     const fechaClave = date.toDateString();
     const notasDelDia = eventos[fechaClave] || [];
     
     const eventoAGuardar = {
-      titulo: nuevoEvento.titulo.trim(),
+      titulo: tituloFinal,
       hora: nuevoEvento.hora || "--:--",
-      horaFin: nuevoEvento.tipo === 'trabajo' ? (nuevoEvento.horaFin || "") : "",
+      horaFin: (nuevoEvento.tipo === 'trabajo' || nuevoEvento.tipo === 'natalia') ? (nuevoEvento.horaFin || "") : "",
       tipo: nuevoEvento.tipo || "normal",
-      creador: obtenerInicialCreador()
+      creador: nuevoEvento.tipo === 'natalia' ? 'N' : obtenerInicialCreador()
     };
 
     // Sincronizar automáticamente con Google Calendar y configurar alarmas móviles
@@ -401,7 +404,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
       const fechaFormato = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
       registrarActividad({
         seccion: 'agenda',
-        descripcion: `Nuevo evento: "${nuevoEvento.titulo.trim()}" (${nuevoEvento.hora || 'Todo el día'}) para el ${fechaFormato}`,
+        descripcion: `Nuevo evento: "${tituloFinal}" (${nuevoEvento.hora || 'Todo el día'}) para el ${fechaFormato}`,
         usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
       });
       // Refrescar lectura de eventos de Google Calendar
@@ -428,7 +431,8 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
   };
 
   const guardarEdicion = async () => {
-    if (!eventoAEditar.titulo.trim()) {
+    const tituloEditado = eventoAEditar.tipo === 'natalia' ? (eventoAEditar.titulo.trim() || 'Natalia') : eventoAEditar.titulo.trim();
+    if (!tituloEditado) {
       alert("Por favor, introduce un título para el evento.");
       return;
     }
@@ -443,11 +447,11 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
 
     const notaActual = notasDelDia[eventoAEditar.index];
     const eventoActualizado = {
-      titulo: eventoAEditar.titulo.trim(),
+      titulo: tituloEditado,
       hora: eventoAEditar.hora || "--:--",
-      horaFin: eventoAEditar.tipo === 'trabajo' ? (eventoAEditar.horaFin || '') : '',
+      horaFin: (eventoAEditar.tipo === 'trabajo' || eventoAEditar.tipo === 'natalia') ? (eventoAEditar.horaFin || '') : '',
       tipo: eventoAEditar.tipo,
-      creador: eventoAEditar.creador || obtenerInicialCreador(),
+      creador: eventoAEditar.tipo === 'natalia' ? 'N' : (eventoAEditar.creador === 'N' ? obtenerInicialCreador() : (eventoAEditar.creador || obtenerInicialCreador())),
       googleCalendarEventId: eventoAEditar.googleCalendarEventId || (typeof notaActual === 'object' ? notaActual?.googleCalendarEventId : undefined)
     };
 
@@ -582,11 +586,14 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
 
           const esAntigua = typeof e === 'string';
           const esTrabajo = !esAntigua && e.tipo === 'trabajo';
-          const tipo = esTrabajo ? 'trabajo' : 'normal';
+          const esNatalia = !esAntigua && (e.tipo === 'natalia' || (e.creador && e.creador.toUpperCase() === 'N'));
+          const tipo = esNatalia ? 'natalia' : (esTrabajo ? 'trabajo' : 'normal');
 
-          // Asignar creador ('J' o 'A')
+          // Asignar creador ('J', 'A' o 'N')
           let creador = 'J';
-          if (!esAntigua && e.creador) {
+          if (esNatalia) {
+            creador = 'N';
+          } else if (!esAntigua && e.creador) {
             creador = e.creador.toUpperCase();
           } else if (esTrabajo) {
             creador = 'J';
@@ -616,10 +623,12 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
           }}>
             {marcadores.map((m, idx) => {
               const esTrabajo = m.tipo === 'trabajo';
+              const esNatalia = m.tipo === 'natalia' || m.creador === 'N';
+              const nombrePersona = m.creador === 'N' ? 'Natalia' : (m.creador === 'J' ? 'Joel' : 'Ana');
               return (
                 <span
                   key={idx}
-                  title={`Evento de ${m.creador === 'J' ? 'Joel' : 'Ana'}`}
+                  title={`Evento de ${nombrePersona}`}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -627,7 +636,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                     fontSize: '8px',
                     fontWeight: '800',
                     color: '#ffffff',
-                    backgroundColor: esTrabajo ? '#111827' : '#EF4444',
+                    backgroundColor: esNatalia ? '#7c3aed' : (esTrabajo ? '#111827' : '#EF4444'),
                     width: '13px',
                     height: '13px',
                     borderRadius: '50%',
@@ -809,16 +818,17 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                 const titulo = esAntigua ? nota : nota.titulo;
                 const horaInicio = esAntigua ? "--:--" : nota.hora;
                 const esDeporte = esEventoDeporte(nota);
-                const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
+                const esNatalia = !esAntigua && !esDeporte && (nota.tipo === 'natalia' || (nota.creador && nota.creador.toUpperCase() === 'N'));
+                const esTrabajo = !esAntigua && !esDeporte && !esNatalia && nota.tipo === 'trabajo';
                 const esGoogle = !esAntigua && (nota.esGoogleCalendar || nota.tipo === 'google');
                 const esCondis = esTurnoTrabajoCondisJoel(nota);
                 const esBiba = esTurnoTrabajoBibaAna(nota);
                 // Para eventos de deporte o google: tratamiento específico
-                const creador = (esDeporte || esGoogle) ? '' : (!esAntigua && nota.creador ? nota.creador.toUpperCase() : (esTrabajo ? 'J' : ''));
+                const creador = (esDeporte || esGoogle) ? '' : (esNatalia ? 'N' : (!esAntigua && nota.creador ? nota.creador.toUpperCase() : (esTrabajo ? 'J' : '')));
                 
-                // Si es trabajo y tiene hora fin, mostramos el rango (Ej: 08:00 - 15:00)
+                // Si es trabajo o Natalia y tiene hora fin, mostramos el rango (Ej: 08:00 - 15:00)
                 let textoHora = horaInicio;
-                if ((esTrabajo || esGoogle) && nota.horaFin) {
+                if ((esTrabajo || esNatalia || esGoogle) && nota.horaFin) {
                     textoHora = `${horaInicio} - ${nota.horaFin}`;
                 }
 
@@ -830,6 +840,9 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                 } else if (esDeporte) {
                   borderColor = '#FACC15';
                   bgColor = '#fefce8';
+                } else if (esNatalia) {
+                  borderColor = '#7c3aed';
+                  bgColor = '#f5f3ff';
                 } else if (esTrabajo) {
                   borderColor = '#0070f3';
                   bgColor = '#eff6ff';
@@ -852,7 +865,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                       cursor: "pointer",
                       transition: "all 0.15s ease"
                     }}
-                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = esDeporte ? '#fef9c3' : (esTrabajo ? '#e0f2fe' : '#f3f4f6'); }}
+                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = esDeporte ? '#fef9c3' : (esNatalia ? '#ede9fe' : (esTrabajo ? '#e0f2fe' : '#f3f4f6')); }}
                     onMouseOut={(e) => { e.currentTarget.style.backgroundColor = bgColor; }}
                   >
                     <div>
@@ -889,7 +902,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                               fontWeight: "800",
                               padding: "1px 6px",
                               borderRadius: "4px",
-                              backgroundColor: esTrabajo ? "#111827" : "#EF4444",
+                              backgroundColor: esNatalia ? "#7c3aed" : (esTrabajo ? "#111827" : "#EF4444"),
                               color: "#ffffff",
                               letterSpacing: "0.5px"
                             }}>
@@ -899,13 +912,13 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                         )}
                         <span style={{ 
                           fontSize: "12px", 
-                          color: esGoogle ? "#1d4ed8" : (esDeporte ? "#a16207" : (esTrabajo ? "#0070f3" : "#4b5563")), 
+                          color: esGoogle ? "#1d4ed8" : (esDeporte ? "#a16207" : (esNatalia ? "#6d28d9" : (esTrabajo ? "#0070f3" : "#4b5563"))), 
                           fontWeight: "bold" 
                         }}>
-                          {esGoogle ? "📅 " + textoHora : (esDeporte ? "🏆 " + textoHora : (esTrabajo ? "💼 " + textoHora : "🕒 " + textoHora))}
+                          {esGoogle ? "📅 " + textoHora : (esDeporte ? "🏆 " + textoHora : (esNatalia ? "👩 " + textoHora : (esTrabajo ? "💼 " + textoHora : "🕒 " + textoHora)))}
                         </span>
                       </div>
-                      <span style={{ fontSize: "15px", fontWeight: (esTrabajo || esDeporte) ? "700" : "600", color: "#111827" }}>
+                      <span style={{ fontSize: "15px", fontWeight: (esTrabajo || esNatalia || esDeporte) ? "700" : "600", color: "#111827" }}>
                         {titulo}
                       </span>
                     </div>
@@ -945,7 +958,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
         </div>
       </div>
 
-      {/* MODAL PARA CREAR EVENTO (NORMAL, TRABAJO O REPETIR) */}
+      {/* MODAL PARA CREAR EVENTO (NORMAL, TRABAJO, NATALIA O REPETIR) */}
       {mostrarModal && (
         <div style={{
           position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
@@ -1001,8 +1014,8 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
               </div>
             </div>
             
-            {/* SELECTOR DE TIPO: NORMAL, TRABAJO O REPETIR */}
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+            {/* SELECTOR DE TIPO: NORMAL, TRABAJO, NATALIA O REPETIR */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
                 <button 
                     type="button"
                     onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'normal', titulo: ''})}
@@ -1031,6 +1044,19 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                 </button>
                 <button 
                     type="button"
+                    onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'natalia', titulo: 'Natalia'})}
+                    style={{ 
+                        flex: 1, padding: '8px 4px', borderRadius: '8px', border: nuevoEvento.tipo === 'natalia' ? '2px solid #7c3aed' : '1px solid #d1d5db', cursor: 'pointer',
+                        backgroundColor: nuevoEvento.tipo === 'natalia' ? '#f5f3ff' : '#ffffff',
+                        color: nuevoEvento.tipo === 'natalia' ? '#6d28d9' : '#374151', 
+                        fontWeight: nuevoEvento.tipo === 'natalia' ? '800' : '600',
+                        fontSize: '12px'
+                    }}
+                >
+                    👩 Natalia
+                </button>
+                <button 
+                    type="button"
                     onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'repetir', titulo: ''})}
                     style={{ 
                         flex: 1, padding: '8px 4px', borderRadius: '8px', border: nuevoEvento.tipo === 'repetir' ? '2px solid #0047b3' : '1px solid #d1d5db', cursor: 'pointer',
@@ -1055,7 +1081,10 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                   <div style={{ display: "flex", gap: "6px" }}>
                     <button
                       type="button"
-                      onClick={() => setCategoriaRepeticion('normal')}
+                      onClick={() => {
+                        setCategoriaRepeticion('normal');
+                        if (nuevoEvento.titulo === 'Natalia') setNuevoEvento({ ...nuevoEvento, titulo: '' });
+                      }}
                       style={{
                         flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer',
                         border: categoriaRepeticion === 'normal' ? '2px solid #ef4444' : '1px solid #d1d5db',
@@ -1068,7 +1097,10 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCategoriaRepeticion('trabajo')}
+                      onClick={() => {
+                        setCategoriaRepeticion('trabajo');
+                        if (nuevoEvento.titulo === 'Natalia') setNuevoEvento({ ...nuevoEvento, titulo: '' });
+                      }}
                       style={{
                         flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer',
                         border: categoriaRepeticion === 'trabajo' ? '2px solid #111827' : '1px solid #d1d5db',
@@ -1078,6 +1110,22 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                       }}
                     >
                       💼 Trabajo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCategoriaRepeticion('natalia');
+                        setNuevoEvento({ ...nuevoEvento, titulo: 'Natalia' });
+                      }}
+                      style={{
+                        flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer',
+                        border: categoriaRepeticion === 'natalia' ? '2px solid #7c3aed' : '1px solid #d1d5db',
+                        backgroundColor: categoriaRepeticion === 'natalia' ? '#f5f3ff' : '#ffffff',
+                        color: categoriaRepeticion === 'natalia' ? '#6d28d9' : '#374151',
+                        fontWeight: '700', fontSize: '11px'
+                      }}
+                    >
+                      👩 Natalia
                     </button>
                   </div>
                 </div>
@@ -1163,7 +1211,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                   </button>
                 ))}
               </div>
-            ) : (
+            ) : (nuevoEvento.tipo === 'natalia' || (nuevoEvento.tipo === 'repetir' && categoriaRepeticion === 'natalia')) ? null : (
               <>
                 <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
                   Título:
@@ -1195,7 +1243,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                     />
                 </>
             ) : (
-                /* MODO TRABAJO O REPETIR TRABAJO: ENTRADA Y SALIDA */
+                /* MODO TRABAJO, NATALIA O REPETIR TRABAJO/NATALIA: ENTRADA Y SALIDA */
                 <div style={{ display: "flex", gap: "10px", marginBottom: "18px" }}>
                     <div style={{ flex: 1 }}>
                         <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", fontSize: "12px", color: "#374151" }}>Entrada ☀️</label>
@@ -1233,7 +1281,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
               <button 
                 type="button"
                 onClick={guardarNota} 
-                style={{ padding: "8px 18px", backgroundColor: nuevoEvento.tipo === 'repetir' ? "#0047b3" : "#111827", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "700", fontSize: "13px" }}
+                style={{ padding: "8px 18px", backgroundColor: nuevoEvento.tipo === 'repetir' ? "#0047b3" : (nuevoEvento.tipo === 'natalia' ? "#7c3aed" : "#111827"), color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "700", fontSize: "13px" }}
               >
                 {nuevoEvento.tipo === 'repetir' ? "Generar Repetición" : "Guardar"}
               </button>
@@ -1304,7 +1352,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
             <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
               <button 
                 type="button"
-                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'normal'})}
+                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'normal', titulo: eventoAEditar.titulo === 'Natalia' ? '' : eventoAEditar.titulo})}
                 style={{ 
                   flex: 1, padding: '8px', borderRadius: '8px',
                   border: eventoAEditar.tipo === 'normal' ? '2px solid #ef4444' : '1px solid #d1d5db',
@@ -1319,7 +1367,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
               </button>
               <button 
                 type="button"
-                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'trabajo'})}
+                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'trabajo', titulo: ['Mañana', 'Tarde'].includes(eventoAEditar.titulo) ? eventoAEditar.titulo : ''})}
                 style={{ 
                   flex: 1, padding: '8px', borderRadius: '8px',
                   border: eventoAEditar.tipo === 'trabajo' ? '2px solid #111827' : '1px solid #d1d5db',
@@ -1331,6 +1379,21 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                 }}
               >
                 💼 Trabajo
+              </button>
+              <button 
+                type="button"
+                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'natalia', titulo: 'Natalia', creador: 'N'})}
+                style={{ 
+                  flex: 1, padding: '8px', borderRadius: '8px',
+                  border: eventoAEditar.tipo === 'natalia' ? '2px solid #7c3aed' : '1px solid #d1d5db',
+                  cursor: 'pointer',
+                  backgroundColor: eventoAEditar.tipo === 'natalia' ? '#f5f3ff' : '#ffffff',
+                  color: eventoAEditar.tipo === 'natalia' ? '#6d28d9' : '#111827', 
+                  fontWeight: eventoAEditar.tipo === 'natalia' ? '800' : '600',
+                  fontSize: '13px'
+                }}
+              >
+                👩 Natalia
               </button>
             </div>
 
@@ -1348,7 +1411,7 @@ export default function Calendario({ usuario, fechaSeleccionada, onFechaChange }
                   </button>
                 ))}
               </div>
-            ) : (
+            ) : eventoAEditar.tipo === 'natalia' ? null : (
               <>
                 <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
                   Título:

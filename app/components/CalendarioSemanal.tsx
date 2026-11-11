@@ -71,7 +71,7 @@ export default function CalendarioSemanal({
   const [diasRepeticion, setDiasRepeticion] = useState<number[]>([1]);
   const [fechaInicioRep, setFechaInicioRep] = useState<string>('');
   const [fechaFinRep, setFechaFinRep] = useState<string>('');
-  const [categoriaRepeticion, setCategoriaRepeticion] = useState<'normal' | 'trabajo'>('normal');
+  const [categoriaRepeticion, setCategoriaRepeticion] = useState<'normal' | 'trabajo' | 'natalia'>('normal');
 
   // Estado para modal de edición
   const [mostrarModalEdicion, setMostrarModalEdicion] = useState<boolean>(false);
@@ -196,8 +196,8 @@ export default function CalendarioSemanal({
     // No mostrar en eventos deportivos
     if (esDeporte) return false;
 
-    // REGLA DE EXCLUSIVIDAD: Si fue creado por o está asignado a Ana ("A"), NO mostrar bajo ninguna circunstancia
-    if (creador === 'A' || creador === 'ANA' || creador.includes('ANA')) {
+    // REGLA DE EXCLUSIVIDAD: Si fue creado por o está asignado a Ana ("A") o Natalia ("N"), NO mostrar bajo ninguna circunstancia
+    if (creador === 'A' || creador === 'ANA' || creador.includes('ANA') || creador === 'N' || creador === 'NATALIA' || tipo === 'natalia') {
       return false;
     }
 
@@ -338,7 +338,10 @@ export default function CalendarioSemanal({
   };
 
   const guardarNota = async () => {
-    if (!nuevoEvento.titulo.trim()) {
+    const esModoNatalia = nuevoEvento.tipo === 'natalia' || (nuevoEvento.tipo === 'repetir' && categoriaRepeticion === 'natalia');
+    const tituloFinal = esModoNatalia ? (nuevoEvento.titulo.trim() || 'Natalia') : nuevoEvento.titulo.trim();
+
+    if (!tituloFinal) {
       alert("Por favor, introduce un título para el evento.");
       return;
     }
@@ -376,11 +379,11 @@ export default function CalendarioSemanal({
           const notasDelDia = nuevosEventos[fechaClave] || [];
 
           const eventoAGuardar: Evento = {
-            titulo: nuevoEvento.titulo.trim(),
+            titulo: tituloFinal,
             hora: nuevoEvento.hora || "--:--",
-            horaFin: categoriaRepeticion === 'trabajo' ? (nuevoEvento.horaFin || "") : "",
+            horaFin: (categoriaRepeticion === 'trabajo' || categoriaRepeticion === 'natalia') ? (nuevoEvento.horaFin || "") : "",
             tipo: categoriaRepeticion,
-            creador: obtenerInicialCreador()
+            creador: categoriaRepeticion === 'natalia' ? 'N' : obtenerInicialCreador()
           };
 
           // Sincronizar con Google Calendar
@@ -416,7 +419,7 @@ export default function CalendarioSemanal({
         await setDoc(doc(db, "agenda", "datos"), nuevosEventos);
         registrarActividad({
           seccion: 'agenda',
-          descripcion: `Nuevo evento recurrente: "${nuevoEvento.titulo.trim()}" (${eventosCreados} días)`,
+          descripcion: `Nuevo evento recurrente: "${tituloFinal}" (${eventosCreados} días)`,
           usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
         });
       } catch (error) {
@@ -426,16 +429,16 @@ export default function CalendarioSemanal({
       return;
     }
 
-    // MODO NORMAL O TRABAJO
+    // MODO NORMAL, TRABAJO O NATALIA
     const fechaClave = fechaModal.toDateString();
     const notasDelDia = eventos[fechaClave] || [];
     
     const eventoAGuardar: Evento = {
-      titulo: nuevoEvento.titulo.trim(),
+      titulo: tituloFinal,
       hora: nuevoEvento.hora || "--:--",
-      horaFin: nuevoEvento.tipo === 'trabajo' ? (nuevoEvento.horaFin || "") : "",
+      horaFin: (nuevoEvento.tipo === 'trabajo' || nuevoEvento.tipo === 'natalia') ? (nuevoEvento.horaFin || "") : "",
       tipo: nuevoEvento.tipo || "normal",
-      creador: obtenerInicialCreador()
+      creador: nuevoEvento.tipo === 'natalia' ? 'N' : obtenerInicialCreador()
     };
 
     // Sincronizar automáticamente con Google Calendar
@@ -469,7 +472,7 @@ export default function CalendarioSemanal({
       const fechaFormato = fechaModal.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
       registrarActividad({
         seccion: 'agenda',
-        descripcion: `Nuevo evento: "${nuevoEvento.titulo.trim()}" (${nuevoEvento.hora || 'Todo el día'}) para el ${fechaFormato}`,
+        descripcion: `Nuevo evento: "${tituloFinal}" (${nuevoEvento.hora || 'Todo el día'}) para el ${fechaFormato}`,
         usuarioEmail: usuario?.email || auth?.currentUser?.email || '',
       });
       cargarEventosGoogle(lunesSemana);
@@ -496,7 +499,8 @@ export default function CalendarioSemanal({
   };
 
   const guardarEdicion = async () => {
-    if (!eventoAEditar.titulo.trim()) {
+    const tituloEditado = eventoAEditar.tipo === 'natalia' ? (eventoAEditar.titulo.trim() || 'Natalia') : eventoAEditar.titulo.trim();
+    if (!tituloEditado) {
       alert("Por favor, introduce un título para el evento.");
       return;
     }
@@ -517,7 +521,7 @@ export default function CalendarioSemanal({
           const res = await sincronizarEventoGoogleCalendar({
             fechaClave,
             evento: {
-              titulo: eventoAEditar.titulo.trim(),
+              titulo: tituloEditado,
               hora: eventoAEditar.hora || "--:--",
               horaFin: eventoAEditar.horaFin || '',
               googleCalendarEventId: gcalId
@@ -544,11 +548,11 @@ export default function CalendarioSemanal({
     });
 
     const eventoActualizado: Evento = {
-      titulo: eventoAEditar.titulo.trim(),
+      titulo: tituloEditado,
       hora: eventoAEditar.hora || "--:--",
-      horaFin: eventoAEditar.tipo === 'trabajo' ? (eventoAEditar.horaFin || '') : '',
+      horaFin: (eventoAEditar.tipo === 'trabajo' || eventoAEditar.tipo === 'natalia') ? (eventoAEditar.horaFin || '') : '',
       tipo: eventoAEditar.tipo,
-      creador: eventoAEditar.creador || obtenerInicialCreador(),
+      creador: eventoAEditar.tipo === 'natalia' ? 'N' : (eventoAEditar.creador === 'N' ? obtenerInicialCreador() : (eventoAEditar.creador || obtenerInicialCreador())),
       googleCalendarEventId: eventoAEditar.googleCalendarEventId || (typeof notaActual === 'object' ? (notaActual as Evento)?.googleCalendarEventId : undefined)
     };
 
@@ -960,16 +964,17 @@ export default function CalendarioSemanal({
                     const titulo = esAntigua ? nota : nota.titulo;
                     const horaInicio = esAntigua ? "--:--" : (nota.hora || "--:--");
                     const esDeporte = esEventoDeporte(nota);
-                    const esTrabajo = !esAntigua && !esDeporte && nota.tipo === 'trabajo';
+                    const esNatalia = !esAntigua && !esDeporte && (nota.tipo === 'natalia' || ((nota as Evento).creador && (nota as Evento).creador!.toUpperCase() === 'N'));
+                    const esTrabajo = !esAntigua && !esDeporte && !esNatalia && nota.tipo === 'trabajo';
                     const esGoogle = !esAntigua && Boolean((nota as any).esGoogleCalendar || (nota as any).tipo === 'google');
                     const esCondis = esTurnoTrabajoCondisJoel(nota);
                     const esBiba = esTurnoTrabajoBibaAna(nota);
                     const horaFin = !esAntigua ? nota.horaFin : "";
                     // Para eventos de deporte o google: sin inicial J/A
-                    const creadorNota = (esDeporte || esGoogle) ? '' : (!esAntigua && (nota as Evento).creador ? (nota as Evento).creador!.toUpperCase() : (esTrabajo ? 'J' : ''));
+                    const creadorNota = (esDeporte || esGoogle) ? '' : (esNatalia ? 'N' : (!esAntigua && (nota as Evento).creador ? (nota as Evento).creador!.toUpperCase() : (esTrabajo ? 'J' : '')));
 
                     let textoHora = horaInicio;
-                    if ((esTrabajo || esGoogle) && horaFin) {
+                    if ((esTrabajo || esNatalia || esGoogle) && horaFin) {
                       textoHora = `${horaInicio} - ${horaFin}`;
                     }
 
@@ -981,6 +986,9 @@ export default function CalendarioSemanal({
                     } else if (esDeporte) {
                       borderColor = '#FACC15';
                       bgColor = '#fefce8';
+                    } else if (esNatalia) {
+                      borderColor = '#7c3aed';
+                      bgColor = '#f5f3ff';
                     } else if (esTrabajo) {
                       borderColor = '#0070f3';
                       bgColor = '#eff6ff';
@@ -1004,7 +1012,7 @@ export default function CalendarioSemanal({
                           transition: 'all 0.15s ease'
                         }}
                         onMouseOver={(e) => {
-                          e.currentTarget.style.backgroundColor = esDeporte ? '#fef9c3' : (esTrabajo ? '#e0f2fe' : (esGoogle ? '#dbeafe' : '#f3f4f6'));
+                          e.currentTarget.style.backgroundColor = esDeporte ? '#fef9c3' : (esNatalia ? '#ede9fe' : (esTrabajo ? '#e0f2fe' : (esGoogle ? '#dbeafe' : '#f3f4f6')));
                         }}
                         onMouseOut={(e) => {
                           e.currentTarget.style.backgroundColor = bgColor;
@@ -1044,7 +1052,7 @@ export default function CalendarioSemanal({
                                   fontWeight: 800,
                                   padding: '1px 5px',
                                   borderRadius: '4px',
-                                  backgroundColor: esTrabajo ? '#111827' : '#EF4444',
+                                  backgroundColor: esNatalia ? '#7c3aed' : (esTrabajo ? '#111827' : '#EF4444'),
                                   color: '#ffffff',
                                   letterSpacing: '0.4px'
                                 }}>
@@ -1055,14 +1063,14 @@ export default function CalendarioSemanal({
                             <span style={{
                               fontSize: '11px',
                               fontWeight: 700,
-                              color: esGoogle ? '#1d4ed8' : (esDeporte ? '#a16207' : (esTrabajo ? '#0070f3' : '#4b5563'))
+                              color: esGoogle ? '#1d4ed8' : (esDeporte ? '#a16207' : (esNatalia ? '#6d28d9' : (esTrabajo ? '#0070f3' : '#4b5563')))
                             }}>
-                              {esGoogle ? `📅 ${textoHora}` : (esDeporte ? `🏆 ${textoHora}` : (esTrabajo ? `💼 ${textoHora}` : `🕒 ${textoHora}`))}
+                              {esGoogle ? `📅 ${textoHora}` : (esDeporte ? `🏆 ${textoHora}` : (esNatalia ? `👩 ${textoHora}` : (esTrabajo ? `💼 ${textoHora}` : `🕒 ${textoHora}`)))}
                             </span>
                           </div>
                           <span style={{
                             fontSize: '13px',
-                            fontWeight: (esTrabajo || esDeporte) ? 700 : 600,
+                            fontWeight: (esTrabajo || esNatalia || esDeporte) ? 700 : 600,
                             color: '#111827'
                           }}>
                             {titulo}
@@ -1119,7 +1127,7 @@ export default function CalendarioSemanal({
         })}
       </div>
 
-      {/* MODAL PARA CREAR EVENTO EN DÍA SELECCIONADO (NORMAL, TRABAJO O REPETIR) */}
+      {/* MODAL PARA CREAR EVENTO EN DÍA SELECCIONADO (NORMAL, TRABAJO, NATALIA O REPETIR) */}
       {mostrarModal && (
         <div style={{
           position: "fixed",
@@ -1181,8 +1189,8 @@ export default function CalendarioSemanal({
               </div>
             </div>
             
-            {/* SELECTOR DE TIPO: NORMAL, TRABAJO O REPETIR */}
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+            {/* SELECTOR DE TIPO: NORMAL, TRABAJO, NATALIA O REPETIR */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
               <button 
                 type="button"
                 onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'normal', titulo: ''})}
@@ -1219,6 +1227,23 @@ export default function CalendarioSemanal({
               </button>
               <button 
                 type="button"
+                onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'natalia', titulo: 'Natalia'})}
+                style={{ 
+                  flex: 1,
+                  padding: '8px 4px',
+                  borderRadius: '8px',
+                  border: nuevoEvento.tipo === 'natalia' ? '2px solid #7c3aed' : '1px solid #d1d5db',
+                  cursor: 'pointer',
+                  backgroundColor: nuevoEvento.tipo === 'natalia' ? '#f5f3ff' : '#ffffff',
+                  color: nuevoEvento.tipo === 'natalia' ? '#6d28d9' : '#374151', 
+                  fontWeight: nuevoEvento.tipo === 'natalia' ? '800' : '600',
+                  fontSize: '12px'
+                }}
+              >
+                👩 Natalia
+              </button>
+              <button 
+                type="button"
                 onClick={() => setNuevoEvento({...nuevoEvento, tipo: 'repetir', titulo: ''})}
                 style={{ 
                   flex: 1,
@@ -1247,7 +1272,10 @@ export default function CalendarioSemanal({
                   <div style={{ display: "flex", gap: "6px" }}>
                     <button
                       type="button"
-                      onClick={() => setCategoriaRepeticion('normal')}
+                      onClick={() => {
+                        setCategoriaRepeticion('normal');
+                        if (nuevoEvento.titulo === 'Natalia') setNuevoEvento({ ...nuevoEvento, titulo: '' });
+                      }}
                       style={{
                         flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer',
                         border: categoriaRepeticion === 'normal' ? '2px solid #ef4444' : '1px solid #d1d5db',
@@ -1260,7 +1288,10 @@ export default function CalendarioSemanal({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCategoriaRepeticion('trabajo')}
+                      onClick={() => {
+                        setCategoriaRepeticion('trabajo');
+                        if (nuevoEvento.titulo === 'Natalia') setNuevoEvento({ ...nuevoEvento, titulo: '' });
+                      }}
                       style={{
                         flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer',
                         border: categoriaRepeticion === 'trabajo' ? '2px solid #111827' : '1px solid #d1d5db',
@@ -1270,6 +1301,22 @@ export default function CalendarioSemanal({
                       }}
                     >
                       💼 Trabajo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCategoriaRepeticion('natalia');
+                        setNuevoEvento({ ...nuevoEvento, titulo: 'Natalia' });
+                      }}
+                      style={{
+                        flex: 1, padding: '6px', borderRadius: '6px', cursor: 'pointer',
+                        border: categoriaRepeticion === 'natalia' ? '2px solid #7c3aed' : '1px solid #d1d5db',
+                        backgroundColor: categoriaRepeticion === 'natalia' ? '#f5f3ff' : '#ffffff',
+                        color: categoriaRepeticion === 'natalia' ? '#6d28d9' : '#374151',
+                        fontWeight: '700', fontSize: '11px'
+                      }}
+                    >
+                      👩 Natalia
                     </button>
                   </div>
                 </div>
@@ -1355,7 +1402,7 @@ export default function CalendarioSemanal({
                   </button>
                 ))}
               </div>
-            ) : (
+            ) : (nuevoEvento.tipo === 'natalia' || (nuevoEvento.tipo === 'repetir' && categoriaRepeticion === 'natalia')) ? null : (
               <>
                 <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
                   Título:
@@ -1470,7 +1517,7 @@ export default function CalendarioSemanal({
                 onClick={guardarNota} 
                 style={{
                   padding: "9px 18px",
-                  backgroundColor: nuevoEvento.tipo === 'repetir' ? "#0047b3" : "#111827",
+                  backgroundColor: nuevoEvento.tipo === 'repetir' ? "#0047b3" : (nuevoEvento.tipo === 'natalia' ? "#7c3aed" : "#111827"),
                   color: "white",
                   border: "none",
                   borderRadius: "8px",
@@ -1556,7 +1603,7 @@ export default function CalendarioSemanal({
             <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
               <button 
                 type="button"
-                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'normal'})}
+                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'normal', titulo: eventoAEditar.titulo === 'Natalia' ? '' : eventoAEditar.titulo})}
                 style={{ 
                   flex: 1, padding: '8px', borderRadius: '8px',
                   border: eventoAEditar.tipo === 'normal' ? '2px solid #ef4444' : '1px solid #d1d5db',
@@ -1571,7 +1618,7 @@ export default function CalendarioSemanal({
               </button>
               <button 
                 type="button"
-                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'trabajo'})}
+                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'trabajo', titulo: ['Mañana', 'Tarde'].includes(eventoAEditar.titulo) ? eventoAEditar.titulo : ''})}
                 style={{ 
                   flex: 1, padding: '8px', borderRadius: '8px',
                   border: eventoAEditar.tipo === 'trabajo' ? '2px solid #111827' : '1px solid #d1d5db',
@@ -1583,6 +1630,21 @@ export default function CalendarioSemanal({
                 }}
               >
                 💼 Trabajo
+              </button>
+              <button 
+                type="button"
+                onClick={() => setEventoAEditar({...eventoAEditar, tipo: 'natalia', titulo: 'Natalia', creador: 'N'})}
+                style={{ 
+                  flex: 1, padding: '8px', borderRadius: '8px',
+                  border: eventoAEditar.tipo === 'natalia' ? '2px solid #7c3aed' : '1px solid #d1d5db',
+                  cursor: 'pointer',
+                  backgroundColor: eventoAEditar.tipo === 'natalia' ? '#f5f3ff' : '#ffffff',
+                  color: eventoAEditar.tipo === 'natalia' ? '#6d28d9' : '#111827', 
+                  fontWeight: eventoAEditar.tipo === 'natalia' ? '800' : '600',
+                  fontSize: '13px'
+                }}
+              >
+                👩 Natalia
               </button>
             </div>
 
@@ -1600,7 +1662,7 @@ export default function CalendarioSemanal({
                   </button>
                 ))}
               </div>
-            ) : (
+            ) : eventoAEditar.tipo === 'natalia' ? null : (
               <>
                 <label style={{ display: "block", marginBottom: "5px", fontWeight: "700", color: "#374151", fontSize: "13px" }}>
                   Título:
