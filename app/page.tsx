@@ -24,7 +24,6 @@ import {
   obtenerSonidoAlarmaPorId
 } from './utils/sonidosAlarma';
 import {
-  signInWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
   GoogleAuthProvider,
@@ -68,8 +67,6 @@ export default function Home() {
     sonidoNombre: string;
   } | null>(null);
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -125,17 +122,6 @@ export default function Home() {
       window.alert(errorOAuth);
     }
   }, []);
-
-  const iniciarSesion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
-      console.error(err);
-      setError("Usuario o contraseña incorrectos");
-    }
-  };
 
   const iniciarSesionConGoogle = async () => {
     setError("");
@@ -578,10 +564,12 @@ export default function Home() {
   // --- SI NO ESTÁS DENTRO: MUESTRA EL LOGIN ---
   return (
     <div style={{
-      height: "100vh",
+      minHeight: "100vh",
       width: "100vw",
       background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-      display: "flex", justifyContent: "center", alignItems: "center", fontFamily: "Arial, sans-serif"
+      display: "flex", justifyContent: "center", alignItems: "center", fontFamily: "Arial, sans-serif",
+      padding: "20px",
+      boxSizing: "border-box"
     }}>
       <div style={{
         backgroundColor: "#f0f2f5",
@@ -654,33 +642,19 @@ export default function Home() {
           <span>Iniciar sesión con Google</span>
         </button>
 
-        {/* SEPARADOR */}
-        <div style={{ display: "flex", alignItems: "center", width: "100%", margin: "18px 0" }}>
-          <div style={{ flex: 1, height: "1px", backgroundColor: "#d1d5db" }} />
-          <span style={{ padding: "0 10px", color: "#6b7280", fontSize: "13px" }}>o con correo</span>
-          <div style={{ flex: 1, height: "1px", backgroundColor: "#d1d5db" }} />
-        </div>
-
-        <form onSubmit={iniciarSesion} style={{ display: "flex", flexDirection: "column", gap: "15px", width: "100%" }}>
-          <input
-            type="email" placeholder="Correo electrónico" value={email} onChange={(e) => setEmail(e.target.value)}
-            style={{ padding: "12px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "16px", outline: "none", backgroundColor: "white", color: "#111827" }}
-          />
-          <input
-            type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)}
-            style={{ padding: "12px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "16px", outline: "none", backgroundColor: "white", color: "#111827" }}
-          />
-          <button
-            type="submit"
-            style={{
-              padding: "12px", borderRadius: "8px", border: "none",
-              background: "linear-gradient(to right, #667eea, #764ba2)",
-              color: "white", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "10px"
-            }}
-          >
-            Entrar
-          </button>
-        </form>
+        {/* BOTÓN ENTRAR */}
+        <button
+          type="button"
+          onClick={iniciarSesionConGoogle}
+          style={{
+            width: "100%",
+            padding: "12px", borderRadius: "8px", border: "none",
+            background: "linear-gradient(to right, #667eea, #764ba2)",
+            color: "white", fontSize: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "15px"
+          }}
+        >
+          Entrar
+        </button>
 
         {error && (
           <div style={{
@@ -698,6 +672,27 @@ export default function Home() {
             {error}
           </div>
         )}
+
+        {/* IMAGEN MAYTE CENTRADA DEBAJO DEL BOTÓN ENTRAR */}
+        <div style={{
+          marginTop: "20px",
+          width: "100%",
+          display: "flex",
+          justifyContent: "center"
+        }}>
+          <img
+            src="/mayte.png"
+            alt="Mayte"
+            style={{
+              width: "200px",
+              maxWidth: "100%",
+              height: "auto",
+              borderRadius: "15px",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+              display: "block"
+            }}
+          />
+        </div>
       </div>
 
       {/* MODAL DE NOVEDADES DE LA VERSIÓN (DISPONIBLE TAMBIÉN EN ACCESO) */}
