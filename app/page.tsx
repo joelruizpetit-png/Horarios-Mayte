@@ -12,7 +12,6 @@ import BlocNotas from './components/BlocNotas';
 import ModalPinPrivado from './components/ModalPinPrivado';
 import ConfiguracionUsuario from './components/ConfiguracionUsuario';
 import ListaCompra from './components/ListaCompra';
-import Quinielas from './components/Quinielas';
 import ModalNovedades from './components/ModalNovedades';
 import ModalVersion from './components/ModalVersion';
 import { auth, db } from './firebase';
@@ -514,9 +513,7 @@ export default function Home() {
             padding: "0 16px 40px 16px"
           }}
         >
-          {seccionPrincipal === 'quinielas' || seccionPrincipal === 'quinielas-estadisticas' || seccionPrincipal === 'quinielas-historial' || seccionPrincipal === 'quinielas-ia' ? (
-            <Quinielas vista={seccionPrincipal === 'quinielas-estadisticas' ? 'estadisticas' : seccionPrincipal === 'quinielas-historial' ? 'historial' : seccionPrincipal === 'quinielas-ia' ? 'ia' : 'boletos'} usuario={usuario} />
-          ) : seccionPrincipal === 'finanzas' && zonaPrivadaDesbloqueada ? (
+          {seccionPrincipal === 'finanzas' && zonaPrivadaDesbloqueada ? (
             <FinanzasFamiliares usuario={usuario} />
           ) : seccionPrincipal === 'bloc-notas' && zonaPrivadaDesbloqueada ? (
             <BlocNotas
