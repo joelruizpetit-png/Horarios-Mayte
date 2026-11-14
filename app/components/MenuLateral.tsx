@@ -141,8 +141,8 @@ export default function MenuLateral({
           {/* LOGO Y TÍTULO */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Image
-              src="/icon.png"
-              alt="Logo de Planificador Familiar"
+              src="/placeholder.png"
+              alt="Logo de Horarios Mayte"
               width={38}
               height={38}
               style={{
@@ -156,7 +156,7 @@ export default function MenuLateral({
             />
             <div>
               <div style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '-0.2px', lineHeight: 1.2 }}>
-                Planificador Familiar
+                Horarios Mayte
               </div>
               <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.75)', fontWeight: 500 }}>
                 Hogar & Agenda

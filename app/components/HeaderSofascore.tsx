@@ -131,7 +131,7 @@ export default function HeaderSofascore({
             )}
 
             <Image
-              src="/icon.png"
+              src="/placeholder.png"
               alt="Logo de Horarios Mayte"
               width={34}
               height={34}
