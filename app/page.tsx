@@ -149,7 +149,15 @@ export default function Home() {
         setError("El navegador bloqueó la ventana emergente. Por favor, habilita los popups.");
         return;
       }
-      setError("Error al iniciar sesión con Google.");
+      if (authError.code === "auth/unauthorized-domain") {
+        setError(`Dominio no autorizado en Firebase (${window.location.hostname}). Añádelo en Firebase Console > Authentication > Settings > Authorized domains.`);
+        return;
+      }
+      if (authError.code === "auth/operation-not-allowed") {
+        setError("El inicio de sesión con Google no está habilitado en Firebase Console > Authentication > Sign-in method.");
+        return;
+      }
+      setError(`Error al iniciar sesión con Google (${authError.code || 'desconocido'}).`);
     }
   };
 

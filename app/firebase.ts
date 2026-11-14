@@ -4,15 +4,17 @@ import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBXvQPqJDXZohK03S2CeXt8ULkyAYbHiD4",
-  authDomain: "planificador-familiar.firebaseapp.com",
-  projectId: "planificador-familiar",
-  storageBucket: "planificador-familiar.firebasestorage.app",
-  messagingSenderId: "979162382340",
-  appId: "1:979162382340:web:927953ddc760881a3cb551"
+  apiKey: "AIzaSyApjxoDTix4TVtOBlaHOIS_UzmPNCw8hNQ",
+  authDomain: "horarios-mayte.firebaseapp.com",
+  projectId: "horarios-mayte",
+  storageBucket: "horarios-mayte.firebasestorage.app",
+  messagingSenderId: "1005767774849",
+  appId: "1:1005767774849:web:501494f2c61ca012743380",
+  measurementId: "G-Q21RZBJNDT"
 };
 
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+
 
