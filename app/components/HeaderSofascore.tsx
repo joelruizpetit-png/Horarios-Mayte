@@ -30,7 +30,6 @@ const DEFAULT_TABS: TabItem[] = [
   { id: 'general', label: 'General' },
   { id: 'semanal', label: 'Semanal' },
   { id: 'deportes', label: 'Deportes', icon: '🏆' },
-  { id: 'menu-alma', label: 'Menú Alma', icon: '🍴' },
 ];
 
 export default function HeaderSofascore({
