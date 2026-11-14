@@ -132,7 +132,7 @@ export default function HeaderSofascore({
 
             <Image
               src="/icon.png"
-              alt="Logo de Planificador Familiar"
+              alt="Logo de Horarios Mayte"
               width={34}
               height={34}
               style={{
@@ -154,7 +154,7 @@ export default function HeaderSofascore({
                 lineHeight: 1.1,
                 color: '#ffffff'
               }}>
-                Planificador Familiar
+                Horarios Mayte
               </h1>
               <span style={{
                 fontSize: '11px',
