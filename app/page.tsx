@@ -39,7 +39,7 @@ import { sincronizarMenuOctubreFirestore } from './data/menuOctubre2026';
 
 const CORREOS_AUTORIZADOS = [
   "joelruizpetit@gmail.com",
-  "aijg1985@gmail.com"
+  "mariateresah460@gmail.com"
 ];
 
 export default function Home() {

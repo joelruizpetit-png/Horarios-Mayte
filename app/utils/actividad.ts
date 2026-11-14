@@ -20,16 +20,16 @@ export function formatearNombreFamiliar(nombre?: string | null, email?: string |
   const n = (nombre || '').toLowerCase().trim();
   const e = (email || '').toLowerCase().trim();
 
-  // 1. Detección de Ana / Arantxa
+  // 1. Detección de Mayte / María Teresa
   if (
-    n.includes('arantxa') ||
-    n.includes('ana') ||
-    e.includes('aijg') ||
-    e.includes('arantxa') ||
-    e.includes('ana') ||
-    e === 'aijg1985@gmail.com'
+    n.includes('mayte') ||
+    n.includes('maite') ||
+    n.includes('maria teresa') ||
+    n.includes('maría teresa') ||
+    e.includes('mariateresah460') ||
+    e === 'mariateresah460@gmail.com'
   ) {
-    return 'Ana';
+    return 'Mayte';
   }
 
   // 2. Detección de Joel
